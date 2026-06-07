@@ -1,0 +1,85 @@
+.scoreboard-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.scoreboard-panel {
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 20px 24px;
+  min-width: 560px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.scoreboard-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scoreboard-header h2 {
+  margin: 0;
+  color: #e0e0e0;
+  font-size: 18px;
+}
+
+.scoreboard-time {
+  color: #888;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.scoreboard-hint {
+  color: #555;
+  font-size: 12px;
+}
+
+.scoreboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #ccc;
+  font-size: 13px;
+}
+
+.scoreboard-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #888;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.scoreboard-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.scoreboard-table tr.defeated td {
+  color: #666;
+  text-decoration: line-through;
+}
+
+.player-color-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}

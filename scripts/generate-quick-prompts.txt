@@ -1,0 +1,112 @@
+# AI精灵图快速生成指南
+
+## 推荐工具
+
+### 1. DALL-E 3 (最简单)
+- 网址: https://chat.openai.com/
+
+### 2. Midjourney (高质量)
+- 网址: https://www.midjourney.com/
+
+### 3. Stable Diffusion (最佳控制)
+- 网址: https://stablediffusionweb.com/
+
+---
+
+## 快速开始
+
+### 步骤1: 复制粘贴提示词
+
+选择你要的单位，复制对应的提示词
+
+### 步骤2: 调整并生成
+
+将提示词粘贴到AI工具中，调整细节，生成图像
+
+### 步骤3: 保存到ai-sprites/目录
+
+保存为PNG图片，命名:
+- allied_soldier.png
+- soviet_soldier.png
+- allied_tank.png
+- soviet_tank.png
+等等...
+
+### 步骤4: 运行后处理
+
+```bash
+node scripts/process-ai-sprites.cjs
+```
+
+---
+
+## 完整提示词库
+
+### 美国大兵 (Allied Soldier)
+```
+pixel art sprite sheet, US army soldier in battle gear, top-down view, 8 directions, walking animation 4 frames, 64x64 pixels, red alert 2 style, blue uniform, green helmet, holding M16 rifle, retro pixel art, transparent background
+```
+
+### 动员兵 (Soviet Soldier)
+```
+pixel art sprite sheet, Soviet infantry soldier, top-down view, 8 directions, walking animation 4 frames, 64x64 pixels, red alert 2 style, red uniform, ushanka hat, holding AK-47, retro pixel art, transparent background
+```
+
+### 灰熊坦克 (Allied Tank)
+```
+pixel art sprite sheet, light tank, top-down view, 8 directions, moving animation 4 frames, 64x64 pixels, red alert 2 style, blue NATO tank, dark grey tracks, turret with cannon, retro pixel art, transparent background
+```
+
+### 犀牛坦克 (Soviet Tank)
+```
+pixel art sprite sheet, heavy battle tank, top-down view, 8 directions, moving animation 4 frames, 64x64 pixels, red alert 2 style, red Soviet tank, heavy armor, dark grey tracks, large turret, retro pixel art, transparent background
+```
+
+### 光棱坦克 (Prism Tank)
+```
+pixel art sprite sheet, futuristic prism laser tank, top-down view, 8 directions, 4 animation frames, 64x64 pixels, red alert 2 style, blue high-tech tank with large prism laser on turret, glowing blue crystals, retro pixel art, transparent background
+```
+
+### 天启坦克 (Apocalypse Tank)
+```
+pixel art sprite sheet, super heavy battle tank, top-down view, 8 directions, 4 animation frames, 64x64 pixels, red alert 2 style, dark red Soviet tank with double cannons and missile launchers, massive treads, retro pixel art, transparent background
+```
+
+### 盟军建造厂
+```
+pixel art building, allied construction yard, top-down isometric view, 128x128 pixels, red alert 2 style, blue factory building with crane, industrial design, large entrance, retro pixel art, transparent background
+```
+
+### 苏军建造厂
+```
+pixel art building, Soviet construction yard, top-down isometric view, 128x128 pixels, red alert 2 style, red fortress building with towers, industrial design, Stalinist architecture, retro pixel art, transparent background
+```
+
+---
+
+## 提示词技巧
+
+### 更好的像素化
+- 添加 "sharp clean pixels, pixel-perfect"
+
+### 更清晰的背景
+- 添加 "on transparent background, alpha channel"
+
+### 更好的方向
+- 添加 "8 compass directions: north, northeast, east, southeast, south, southwest, west, northwest"
+
+### 颜色约束
+- 添加 "color palette limited"
+
+---
+
+## 文件放置位置
+```
+ai-sprites/
+├── allied-soldier.png
+├── soviet-soldier.png
+├── allied-tank.png
+├── soviet-tank.png
+├── allied-command.png
+└── soviet-command.png
+```

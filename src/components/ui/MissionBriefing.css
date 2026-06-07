@@ -1,0 +1,358 @@
+.mission-briefing {
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.briefing-header {
+  display: flex;
+  align-items: center;
+  padding: 20px 30px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.back-button {
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 14px;
+}
+
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(-5px);
+}
+
+.mission-title {
+  margin-left: 30px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.mission-title h1 {
+  font-size: 32px;
+  margin: 0;
+  background: linear-gradient(90deg, #FFD700, #FFA500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.mission-campaign {
+  padding: 5px 15px;
+  background: rgba(255, 215, 0, 0.2);
+  border: 1px solid rgba(255, 215, 0, 0.5);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.briefing-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.briefing-left,
+.briefing-right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.map-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.map-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(45deg, #2a2a4a, #3a3a5a);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.map-placeholder span {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.intel-section,
+.hints-section,
+.objectives-section,
+.conditions-section,
+.rewards-section {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.intel-section h3,
+.hints-section h3,
+.objectives-section h3,
+.rewards-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #FFD700;
+}
+
+.intel-text {
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  margin: 0;
+}
+
+.hints-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hints-section li {
+  padding: 8px 0;
+  padding-left: 20px;
+  position: relative;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+}
+
+.hints-section li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  color: #FFD700;
+}
+
+.objectives-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.objective-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border-left: 3px solid;
+}
+
+.objective-item.primary {
+  border-left-color: #FFD700;
+}
+
+.objective-item.secondary {
+  border-left-color: #87CEEB;
+}
+
+.objective-item.bonus {
+  border-left-color: #FF69B4;
+}
+
+.objective-icon {
+  font-size: 20px;
+}
+
+.objective-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.objective-title {
+  font-weight: bold;
+  color: #fff;
+  font-size: 14px;
+}
+
+.objective-desc {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.conditions-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.condition-group h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+.condition-group:first-child h4 {
+  color: #44FF44;
+}
+
+.condition-group:last-child h4 {
+  color: #FF4444;
+}
+
+.condition-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.condition-group li {
+  padding: 6px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 15px;
+}
+
+.reward-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.reward-item.unlock {
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.reward-icon {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.reward-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: #FFD700;
+}
+
+.reward-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 3px;
+}
+
+.time-limit,
+.par-time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.time-icon {
+  font-size: 20px;
+}
+
+.briefing-footer {
+  padding: 20px 30px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.difficulty-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.difficulty-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.difficulty-button {
+  padding: 8px 20px;
+  background: transparent;
+  border: 2px solid;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.difficulty-button:hover {
+  transform: scale(1.05);
+}
+
+.difficulty-button.selected {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.start-button {
+  padding: 15px 50px;
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  border: none;
+  border-radius: 8px;
+  color: #000;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.start-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.start-button:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 768px) {
+  .briefing-content {
+    grid-template-columns: 1fr;
+  }
+
+  .conditions-section {
+    grid-template-columns: 1fr;
+  }
+
+  .briefing-footer {
+    flex-direction: column;
+    gap: 20px;
+  }
+}

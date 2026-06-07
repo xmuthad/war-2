@@ -1,0 +1,371 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Roboto Mono', monospace;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* RA2 Primary Colors */
+  --color-primary: #FFD700;
+  --color-primary-dark: #CC9900;
+  --color-primary-light: #FFE44D;
+  --color-primary-rgb: 255, 215, 0;
+
+  --color-danger: #FF4444;
+  --color-danger-dark: #CC0000;
+  --color-danger-rgb: 255, 68, 68;
+
+  --color-success: #44FF44;
+  --color-success-dark: #22AA22;
+  --color-success-rgb: 68, 255, 68;
+
+  --color-warning: #FFFF44;
+  --color-warning-rgb: 255, 255, 68;
+
+  --color-info: #00B4FF;
+  --color-info-rgb: 0, 180, 255;
+
+  --color-allied: #2255AA;
+  --color-allied-light: #3377CC;
+  --color-soviet: #AA1111;
+  --color-soviet-light: #DD2222;
+
+  /* RA2 Metal Panel Colors */
+  --color-bg-base: #080c12;
+  --color-bg-panel: #1a2332;
+  --color-bg-panel-solid: #1a2332;
+  --color-bg-dark: #0d1520;
+  --color-bg-hover: rgba(255, 215, 0, 0.08);
+  --color-bg-active: rgba(255, 215, 0, 0.15);
+  --color-bg-inset: #0a1018;
+
+  /* Metal texture colors */
+  --color-metal-light: #5a6a7a;
+  --color-metal-mid: #3a4a5a;
+  --color-metal-dark: #0d1520;
+  --color-metal-highlight: #7a8a9a;
+
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #b8c8d8;
+  --color-text-muted: #6a7a8a;
+  --color-text-dim: #3a4a5a;
+  --color-text-label: #8899aa;
+
+  --color-border-default: #2a3a4a;
+  --color-border-primary: #4a5a3a;
+  --color-border-primary-strong: rgba(255, 215, 0, 0.4);
+  --color-border-primary-bright: rgba(255, 215, 0, 0.7);
+
+  --font-heading: 'Orbitron', sans-serif;
+  --font-body: 'Roboto Mono', monospace;
+
+  --font-size-xs: 0.7rem;
+  --font-size-sm: 0.8rem;
+  --font-size-base: 0.9rem;
+  --font-size-md: 0.95rem;
+  --font-size-lg: 1.05rem;
+  --font-size-xl: 1.15rem;
+  --font-size-2xl: 1.35rem;
+  --font-size-3xl: 1.6rem;
+  --font-size-4xl: 2.2rem;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 6px;
+  --spacing-md: 10px;
+  --spacing-lg: 14px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 28px;
+
+  /* RA2: Sharp angular corners */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 5px;
+  --radius-pill: 3px;
+  --radius-full: 50%;
+
+  /* RA2: Stronger shadows for depth */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 3px 8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 5px 16px rgba(0, 0, 0, 0.7);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.8);
+  --shadow-primary: 0 0 12px rgba(255, 215, 0, 0.15);
+  --shadow-primary-strong: 0 0 20px rgba(255, 215, 0, 0.3);
+  --shadow-inset: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+
+  /* Bevel effect for 3D buttons */
+  --bevel-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --bevel-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  --bevel-pressed: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+
+  /* Panel gradient */
+  --panel-gradient: linear-gradient(180deg, #243444 0%, #1a2832 40%, #142028 100%);
+  --panel-gradient-dark: linear-gradient(180deg, #1a2832 0%, #0d1520 100%);
+
+  /* Scanline */
+  --scanline-opacity: 0.03;
+
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.18s ease;
+  --transition-smooth: 0.25s ease;
+  --transition-slow: 0.4s ease;
+
+  --z-panel: 40;
+  --z-bar: 50;
+  --z-overlay: 100;
+  --z-menu: 200;
+  --z-tooltip: 300;
+  --z-notification: 400;
+  --z-modal: 1000;
+
+  --health-high: #44FF44;
+  --health-medium: #FFFF44;
+  --health-low: #FF4444;
+  --health-critical: #FF0000;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-bg-base);
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+button {
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+::selection {
+  background: rgba(var(--color-primary-rgb), 0.3);
+  color: var(--color-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d1520;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-metal-mid);
+  border-radius: 1px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-metal-light);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(var(--color-primary-rgb), 0.3); }
+  50% { box-shadow: 0 0 20px rgba(var(--color-primary-rgb), 0.6); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scanlines {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 4px; }
+}
+
+@keyframes metalSheen {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes evaPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-in;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* ============ RA2 Utility Classes ============ */
+
+/* Metal panel base - angular chamfered corners */
+.metal-panel {
+  background: var(--panel-gradient);
+  border: 1px solid var(--color-border-default);
+  box-shadow: var(--bevel-highlight), var(--shadow-md);
+  clip-path: polygon(
+    0 0, calc(100% - 8px) 0, 100% 8px,
+    100% 100%, 8px 100%, 0 calc(100% - 8px)
+  );
+  position: relative;
+}
+
+.metal-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-metal-highlight), transparent);
+  opacity: 0.4;
+}
+
+/* Bevel button - 3D raised effect */
+.bevel-button {
+  background: linear-gradient(180deg, #3a4a5a 0%, #2a3a4a 50%, #1a2a3a 100%);
+  border: 1px solid #4a5a6a;
+  box-shadow: var(--bevel-highlight), var(--bevel-shadow), var(--shadow-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.bevel-button:hover {
+  background: linear-gradient(180deg, #4a5a6a 0%, #3a4a5a 50%, #2a3a4a 100%);
+  border-color: var(--color-primary);
+  box-shadow: var(--bevel-highlight), var(--bevel-shadow), var(--shadow-primary);
+}
+
+.bevel-button:active {
+  background: linear-gradient(180deg, #1a2a3a 0%, #2a3a4a 100%);
+  box-shadow: var(--bevel-pressed);
+  transform: translateY(1px);
+}
+
+.bevel-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+/* Inset display - sunken area for values/bars */
+.inset-display {
+  background: var(--color-bg-inset);
+  border: 1px solid #0a0f14;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Scanline overlay effect */
+.scanline-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, var(--scanline-opacity)) 2px,
+    rgba(0, 0, 0, var(--scanline-opacity)) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
