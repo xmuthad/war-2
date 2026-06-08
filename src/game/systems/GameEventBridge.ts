@@ -11,11 +11,10 @@ const SOUND_EVENT_MAP: Partial<Record<GameEventType, string>> = {
   'unit:attack': 'unitAttack',
   'unit:destroyed': 'unitDestroyed',
   'unit:move': 'unitMove',
-  'unit:select': 'unitSelect',
   'unit:produced': 'unitProduced',
-  'building:constructed': 'buildingPlace',
+  'unit:promoted': 'upgradeComplete',
+  'building:constructed': 'buildingComplete',
   'building:destroyed': 'buildingDestroyed',
-  'building:damaged': 'buildingHit',
   'resource:collected': 'resourceCollect',
   'resource:deposited': 'oreDeposit',
   'resource:depleted': 'resourceDepleted',
@@ -35,6 +34,8 @@ const SOUND_EVENT_MAP: Partial<Record<GameEventType, string>> = {
   'transport:load': 'unitMove',
   'transport:unload': 'unitMove',
   'unit:teleport': 'chronoShift',
+  'superweapon:charging': 'superweaponCharging',
+  'superweapon:launch': 'superweaponLaunch',
 };
 
 export class GameEventBridge {
@@ -46,6 +47,9 @@ export class GameEventBridge {
   private lastPlayerLossNotice: number = 0;
   private playerLossCounter: number = 0;
   private lastPowerNotice: number = 0;
+  private lastBuildingDamagedNotice: number = 0;
+  private lastCombatSoundTime: number = 0;
+  private static readonly COMBAT_SOUND_THROTTLE = 100; // ms between combat sounds
 
   private getPlayerFaction(): Faction | null {
     try {
@@ -170,7 +174,11 @@ export class GameEventBridge {
         break;
       }
       case 'building:damaged': {
-        gameUIController.showNotification('建筑受到攻击', 'warning', 2500);
+        const now = Date.now();
+        if (now - this.lastBuildingDamagedNotice > 5000) {
+          gameUIController.showNotification('建筑受到攻击', 'warning', 2500);
+          this.lastBuildingDamagedNotice = now;
+        }
         break;
       }
       case 'resource:depleted': {
@@ -178,7 +186,13 @@ export class GameEventBridge {
         break;
       }
       case 'unit:teleport': {
-        gameUIController.showNotification('超时空传送完成', 'success', 2500);
+        const teleportFaction = event.data?.faction as Faction | undefined;
+        const playerFaction = this.getPlayerFaction();
+        if (teleportFaction && teleportFaction !== playerFaction) {
+          gameUIController.showNotification('⚠️ 检测到敌方超时空传送！', 'error', 3500);
+        } else {
+          gameUIController.showNotification('超时空传送完成', 'success', 2500);
+        }
         break;
       }
       case 'alert:lowPower': {
@@ -204,6 +218,33 @@ export class GameEventBridge {
         const amount = event.data?.amount as number | undefined;
         if (amount) {
           gameUIController.showNotification(`💰 矿石入库 +$${amount}`, 'success', 1500);
+        }
+        break;
+      }
+      case 'superweapon:charging': {
+        const swType = event.data?.type as string | undefined;
+        const progress = event.data?.progress as number | undefined;
+        const faction = event.data?.faction as Faction | undefined;
+        const playerFaction = this.getPlayerFaction();
+        const swNames: Record<string, string> = { nuclear_silo: '核弹', iron_curtain: '铁幕', chronosphere: '超时空' };
+        const swName = swNames[swType || ''] || '超级武器';
+        if (faction === playerFaction) {
+          gameUIController.showNotification(`⚠️ ${swName}充能 ${Math.round((progress || 0) * 100)}%`, 'info', 2000);
+        } else {
+          gameUIController.showNotification(`⚠️ 检测到敌方${swName}充能 ${Math.round((progress || 0) * 100)}%`, 'warning', 3000);
+        }
+        break;
+      }
+      case 'superweapon:launch': {
+        const swType2 = event.data?.type as string | undefined;
+        const faction2 = event.data?.faction as Faction | undefined;
+        const playerFaction2 = this.getPlayerFaction();
+        const swNames2: Record<string, string> = { nuclear_silo: '核弹', iron_curtain: '铁幕', chronosphere: '超时空' };
+        const swName2 = swNames2[swType2 || ''] || '超级武器';
+        if (faction2 === playerFaction2) {
+          gameUIController.showNotification(`✅ ${swName2}已就绪！`, 'success', 4000);
+        } else {
+          gameUIController.showNotification(`🚨 敌方${swName2}已就绪！`, 'error', 5000);
         }
         break;
       }
@@ -234,6 +275,12 @@ export class GameEventBridge {
 
     const soundKey = SOUND_EVENT_MAP[event.type];
     if (soundKey) {
+      // Throttle combat sounds to prevent audio spam from rapid-fire units
+      if (event.type === 'combat:hit' || event.type === 'combat:projectile') {
+        const now = Date.now();
+        if (now - this.lastCombatSoundTime < GameEventBridge.COMBAT_SOUND_THROTTLE) return;
+        this.lastCombatSoundTime = now;
+      }
       this.soundManager.play(soundKey, { position });
     }
 
@@ -286,14 +333,19 @@ export class GameEventBridge {
       case 'combat:hit':
         this.effectSystem.playMuzzleFlash(position.x, position.y, 0);
         break;
-      case 'combat:emp':
-        this.effectSystem.playTeslaZap(position.x, position.y, position.x, position.y);
+      case 'combat:emp': {
+        const attackerPos = event.data?.attackerPosition as { x: number; y: number } | undefined;
+        if (attackerPos) {
+          this.effectSystem.playTeslaZap(attackerPos.x, attackerPos.y, position.x, position.y);
+        } else {
+          this.effectSystem.playTeslaZap(position.x, position.y, position.x + 60, position.y - 60);
+        }
         break;
+      }
       case 'building:constructed':
       case 'unit:produced':
         this.effectSystem.playBuildEffect(position.x, position.y);
         break;
-      case 'unit:levelUp':
       case 'unit:promoted':
         this.effectSystem.playHealEffect(position.x, position.y);
         break;
@@ -302,16 +354,28 @@ export class GameEventBridge {
         this.effectSystem.playSmoke(position.x, position.y);
         const buildingSize = (event.data?.size as number) || 2;
         this.effectSystem.playBuildingRubble(position.x, position.y, buildingSize);
+        // Clean up building sprite to prevent memory leak
+        const buildingId = event.data?.buildingId as string | undefined;
+        if (buildingId) this.scene.removeBuilding(buildingId);
         break;
       }
       case 'unit:destroyed': {
         const unitType = (event.data?.unitType as string) || '';
         this.effectSystem.playUnitDeathEffect(position.x, position.y, unitType);
+        // Leave wreckage for vehicle units
+        const isInfantry = ['soldier', 'rocketeer', 'engineer', 'sniper', 'tanya', 'terrorist', 'crazy_ivan', 'chrono', 'desolator', 'conscript', 'flakinfantry', 'seal'].includes(unitType);
+        const isAirborne = ['helicopter', 'blackhawk', 'kirov', 'yak'].includes(unitType);
+        if (!isInfantry && !isAirborne) {
+          this.effectSystem.playVehicleWreckage(position.x, position.y);
+        }
+        // Clean up unit sprite to prevent memory leak
+        const unitId = event.data?.unitId as string | undefined;
+        if (unitId) this.scene.removeUnit(unitId);
         break;
       }
       case 'transport:load':
       case 'transport:unload':
-        this.effectSystem.playMuzzleFlash(position.x, position.y, 0);
+        this.effectSystem.playBuildEffect(position.x, position.y);
         break;
       case 'unit:teleport':
         this.effectSystem.playChronoShiftEffect(position.x, position.y);

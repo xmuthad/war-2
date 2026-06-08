@@ -114,6 +114,9 @@ export const GameCanvas: React.FC = () => {
         );
         scene.setUnitSelected(unit.id, unit.isSelected);
         scene.setUnitHealth(unit.id, unit.health, unit.maxHealth);
+        if (scene.setUnitInvulnerable) {
+          scene.setUnitInvulnerable(unit.id, !!unit.isInvulnerable);
+        }
         scene.setUnitRank(unit.id, unit.rank);
         if (unit.type === UnitType.PHANTOM) {
           scene.setUnitDisguised(unit.id, unit.isDisguised || false);

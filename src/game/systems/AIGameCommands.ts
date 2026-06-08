@@ -2,6 +2,7 @@ import { GameCommands } from './AIController';
 import { useGameStore } from '../../store/gameStore';
 import { UnitType, BuildingType, Vector2, Faction, UnitState, UpgradeType } from '../../types';
 import { UNITS_BY_FACTION } from './AIUnitLookup';
+import { BUILDINGS_BY_FACTION } from './AIUnitLookup';
 
 function getStore() {
   return useGameStore.getState();
@@ -80,6 +81,11 @@ export function createGameCommands(faction: Faction): GameCommands {
     buildStructure(buildingType: string, position: Vector2): void {
       const aiPlayer = findAIPlayerByFaction(faction);
       if (!aiPlayer) return;
+
+      // Pre-check affordability before calling store
+      const factionBuildings = BUILDINGS_BY_FACTION[faction] || {};
+      const buildingData = factionBuildings[buildingType as BuildingType] as { cost?: number } | undefined;
+      if (buildingData && buildingData.cost && aiPlayer.money < buildingData.cost) return;
 
       const store = getStore();
       store.buildStructureForPlayer(aiPlayer.id, buildingType as BuildingType, position);
@@ -179,12 +185,15 @@ export function createGameCommands(faction: Faction): GameCommands {
     scatterUnit(unitId: string, position: Vector2): void {
       const scatterAngle = Math.random() * Math.PI * 2;
       const scatterDist = 100 + Math.random() * 100;
+      const store = getStore();
+      const map = store.map;
+      const mapW = map ? map.width * 64 : Infinity;
+      const mapH = map ? map.height * 64 : Infinity;
       const newPos = {
-        x: position.x + Math.cos(scatterAngle) * scatterDist,
-        y: position.y + Math.sin(scatterAngle) * scatterDist,
+        x: Math.max(0, Math.min(mapW - 64, position.x + Math.cos(scatterAngle) * scatterDist)),
+        y: Math.max(0, Math.min(mapH - 64, position.y + Math.sin(scatterAngle) * scatterDist)),
       };
 
-      const store = getStore();
       store.moveUnit(unitId, newPos);
     },
 
@@ -246,6 +255,25 @@ export function createGameCommands(faction: Faction): GameCommands {
     activateChronosphere: (buildingId: string, sourcePosition: Vector2, targetPosition: Vector2): void => {
       const store = getStore();
       store.activateChronosphere(buildingId, sourcePosition, targetPosition);
+    },
+
+    chronoShiftUnit: (unitId: string, targetPosition: Vector2): void => {
+      const store = getStore();
+      const allPlayers = [store.currentPlayer, ...store.aiPlayers].filter(Boolean);
+      for (const player of allPlayers) {
+        const unit = player.units.find(u => u.id === unitId);
+        if (unit && !unit.isChronoShifting && !unit.isChronoCooldown) {
+          unit.chronoShiftTarget = { ...targetPosition };
+          unit.chronoShiftTimer = 2.0;
+          unit.isChronoShifting = true;
+          break;
+        }
+      }
+    },
+
+    sellBuilding: (buildingId: string): void => {
+      const store = getStore();
+      store.sellBuildingForPlayer(store.aiPlayers[0]?.id || '', buildingId);
     },
   };
 }

@@ -4,10 +4,55 @@ import { GAME_CONFIG } from '../config/GameConfig';
 import { AI_CONFIG } from '../config/AIConfig';
 import { gameEventBus } from './GameEventBus';
 import { useGameStore } from '../../store/gameStore';
+import { mapManager } from '../map/MapManager';
 
 export class ProductionSystem {
+  /**
+   * Find a valid spawn position around a building.
+   * Tries the default position first, then searches in expanding rings.
+   */
+  private findSpawnPosition(building: Building, player: Player): Vector2 {
+    const tileSize = GAME_CONFIG.TILE_SIZE;
+    const defaultPos: Vector2 = building.rallyPoint
+      ? { ...building.rallyPoint }
+      : { x: building.position.x + building.width * tileSize, y: building.position.y };
+
+    // Check if default position is walkable and not overlapping another unit
+    if (mapManager.isWalkableAtPosition(defaultPos.x, defaultPos.y) && !this.isUnitAtPosition(defaultPos, player)) {
+      return defaultPos;
+    }
+
+    // Search in expanding rings around the building center
+    const centerX = building.position.x + (building.width * tileSize) / 2;
+    const centerY = building.position.y + (building.height * tileSize) / 2;
+    const step = tileSize;
+
+    for (let radius = 1; radius <= 6; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue; // Only check the ring edge
+          const candidate: Vector2 = { x: centerX + dx * step, y: centerY + dy * step };
+          if (mapManager.isWalkableAtPosition(candidate.x, candidate.y) && !this.isUnitAtPosition(candidate, player)) {
+            return candidate;
+          }
+        }
+      }
+    }
+
+    // Fallback: return default position even if blocked
+    return defaultPos;
+  }
+
+  private isUnitAtPosition(pos: Vector2, player: Player): boolean {
+    const threshold = GAME_CONFIG.TILE_SIZE * 0.5;
+    return player.units.some(u =>
+      Math.abs(u.position.x - pos.x) < threshold &&
+      Math.abs(u.position.y - pos.y) < threshold
+    );
+  }
   update(player: Player, deltaTime: number, createUnit: (type: UnitType, faction: Faction, position: Vector2) => Unit): void {
     const isLowPower = player.power < GAME_CONFIG.LOW_POWER_THRESHOLD;
+    const { weatherBuildModifier, maxUnits } = useGameStore.getState();
 
     const diffKey = player.isAI
       ? ((player.difficulty || Difficulty.NORMAL).toString().toLowerCase()) as keyof typeof AI_CONFIG.PRODUCTION_SPEED
@@ -24,7 +69,6 @@ export class ProductionSystem {
 
     for (const building of player.buildings) {
       if (building.newUnitCooldown && building.newUnitCooldown > 0) {
-        const weatherBuildModifier = useGameStore.getState().weatherBuildModifier;
         const sameTypeCount = buildingCounts[building.type] || 1;
         const multiBuildingSpeedup = 1 + (sameTypeCount - 1) * 0.3; // Each additional building adds 30% speed
         const speedModifier = (isLowPower ? GAME_CONFIG.POWER_SLOWDOWN_FACTOR : 1) * aiSpeedMult * weatherBuildModifier * multiBuildingSpeedup;
@@ -39,7 +83,6 @@ export class ProductionSystem {
         if (building.newUnitCooldown <= 0) {
           building.newUnitCooldown = 0;
           if (building.producingUnit) {
-            const maxUnits = useGameStore.getState().maxUnits;
             if (player.units.length >= maxUnits) {
               // At unit cap - refund the queued item and skip production
               const cancelledItem = building.productionQueue[0];
@@ -58,9 +101,7 @@ export class ProductionSystem {
               }
               continue;
             }
-            const spawnPos = building.rallyPoint
-              ? { ...building.rallyPoint }
-              : { x: building.position.x + building.width * GAME_CONFIG.TILE_SIZE, y: building.position.y };
+            const spawnPos = this.findSpawnPosition(building, player);
             player.units.push(createUnit(building.producingUnit, building.faction, spawnPos));
             player.statistics.unitsProduced++;
             gameEventBus.emit('unit:produced', { unitType: building.producingUnit, faction: building.faction, position: spawnPos });
@@ -119,9 +160,15 @@ export class ProductionSystem {
 
     building.productionQueue.splice(queueIndex, 1);
 
-    // If the cancelled item was being produced, reset producingUnit
+    // If the cancelled item was being produced, start the next item
     if (building.producingUnit && queueIndex === 0) {
       building.producingUnit = null;
+      // Start next item in queue if any
+      if (building.productionQueue.length > 0) {
+        const nextItem = building.productionQueue[0];
+        building.producingUnit = nextItem.type as UnitType;
+        building.newUnitCooldown = nextItem.totalTime - nextItem.progress;
+      }
     }
 
     return true;

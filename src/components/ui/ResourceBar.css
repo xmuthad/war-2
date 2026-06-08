@@ -315,6 +315,133 @@
 .compact .resource-icon { font-size: 0.9rem; }
 .compact .resource-value { font-size: 0.9rem; }
 
+/* Superweapon section */
+.superweapon-section {
+  padding-top: 3px;
+  border-top: 1px solid #2a3a4a;
+}
+
+.superweapon-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.superweapon-title {
+  color: var(--color-warning);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.superweapon-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+  background: #0a1018;
+  border: 1px solid #1a2a3a;
+  transition: all var(--transition-fast);
+}
+
+.superweapon-item.ready {
+  border-color: #ff6600;
+  animation: superweaponPulse 1.5s ease-in-out infinite;
+}
+
+.superweapon-item.own.ready {
+  border-color: var(--color-success);
+}
+
+@keyframes superweaponPulse {
+  0%, 100% { box-shadow: 0 0 2px rgba(255, 102, 0, 0.3); }
+  50% { box-shadow: 0 0 6px rgba(255, 102, 0, 0.6); }
+}
+
+.superweapon-item.own.ready {
+  animation: superweaponPulseOwn 1.5s ease-in-out infinite;
+}
+
+@keyframes superweaponPulseOwn {
+  0%, 100% { box-shadow: 0 0 2px rgba(68, 255, 68, 0.3); }
+  50% { box-shadow: 0 0 6px rgba(68, 255, 68, 0.6); }
+}
+
+.superweapon-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.superweapon-icon {
+  font-size: 0.75rem;
+}
+
+.superweapon-name {
+  color: var(--color-text-primary);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.superweapon-player {
+  font-size: 0.55rem;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.superweapon-ready-text {
+  color: var(--color-success);
+  font-size: 0.65rem;
+  font-weight: 700;
+  animation: readyBlink 1s ease-in-out infinite;
+}
+
+@keyframes readyBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.superweapon-charge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.superweapon-bar {
+  width: 60px;
+  height: 5px;
+  background: #0a0a0a;
+  border: 1px solid #1a2a3a;
+  overflow: hidden;
+}
+
+.superweapon-fill {
+  height: 100%;
+  transition: width var(--transition-smooth);
+}
+
+.superweapon-fill.low {
+  background: linear-gradient(90deg, #880000, #ff4444);
+}
+
+.superweapon-fill.mid {
+  background: linear-gradient(90deg, #886600, #ffcc00);
+}
+
+.superweapon-fill.high {
+  background: linear-gradient(90deg, #008800, #44ff44);
+}
+
+.superweapon-time {
+  color: var(--color-text-muted);
+  font-size: 0.6rem;
+  font-family: var(--font-heading);
+  min-width: 28px;
+  text-align: right;
+}
+
 @media (max-width: 768px) {
   .resource-bar-container {
     min-width: auto;

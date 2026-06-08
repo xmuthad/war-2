@@ -213,6 +213,8 @@ export const BUILDING_SPRITE_KEYS: SpriteMapping = {
   [createBuildingSpriteKey(Faction.USA, BuildingType.TURRET)]: 'usa_turret',
   [createBuildingSpriteKey(Faction.USA, BuildingType.DEFENSE)]: 'usa_defense',
   [createBuildingSpriteKey(Faction.USA, BuildingType.AIRFIELD)]: 'usa_airfield',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.CHRONOSPHERE)]: 'usa_chronosphere',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.NAVAL_SHIPYARD)]: 'usa_naval_shipyard',
 
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.COMMAND)]: 'soviet_command',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.BARRACKS)]: 'soviet_barracks',
@@ -228,6 +230,10 @@ export const BUILDING_SPRITE_KEYS: SpriteMapping = {
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.AIRFIELD)]: 'soviet_airfield',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.HELIPAD)]: 'soviet_airfield',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.TURRET)]: 'soviet_turret',
+  [createBuildingSpriteKey(Faction.SOVIET, BuildingType.FLAME_TOWER)]: 'soviet_flame_tower',
+  [createBuildingSpriteKey(Faction.SOVIET, BuildingType.NUCLEAR_SILO)]: 'soviet_nuclear_silo',
+  [createBuildingSpriteKey(Faction.SOVIET, BuildingType.IRON_CURTAIN)]: 'soviet_iron_curtain',
+  [createBuildingSpriteKey(Faction.SOVIET, BuildingType.NAVAL_SHIPYARD)]: 'soviet_naval_shipyard',
 
   // Allied sub-factions share building sprites
   [createBuildingSpriteKey(Faction.BRITAIN, BuildingType.COMMAND)]: 'usa_command',
@@ -412,7 +418,7 @@ export const SPRITE_PATHS = {
     germany_miner: '/assets/sprites/units/allied_miner.png',
 
     france_soldier: '/assets/sprites/units/allied_soldier.png',
-    france_phantom: '/assets/sprites/units/allied_helicopter.png',
+    france_phantom: '/assets/sprites/units/allied_phantom.png',
     france_tank: '/assets/sprites/units/allied_tank.png',
     france_miner: '/assets/sprites/units/allied_miner.png',
 
@@ -476,6 +482,13 @@ export const SPRITE_PATHS = {
     soviet_airfield: '/assets/sprites/buildings/soviet_airfield.png',
     usa_defense: '/assets/sprites/buildings/allied_defense.png',
     usa_airfield: '/assets/sprites/buildings/allied_airfield.png',
+    usa_chronosphere: '/assets/sprites/buildings/allied_chronosphere.png',
+    usa_naval_shipyard: '/assets/sprites/buildings/allied_naval_shipyard.png',
+
+    soviet_flame_tower: '/assets/sprites/buildings/soviet_flame_tower.png',
+    soviet_nuclear_silo: '/assets/sprites/buildings/soviet_nuclear_silo.png',
+    soviet_iron_curtain: '/assets/sprites/buildings/soviet_iron_curtain.png',
+    soviet_naval_shipyard: '/assets/sprites/buildings/soviet_naval_shipyard.png',
   }
 };
 
@@ -521,5 +534,13 @@ export function getUnitSpriteKey(faction: Faction, type: UnitType): string {
 }
 
 export function getBuildingSpriteKey(faction: Faction, type: BuildingType): string {
-  return BUILDING_SPRITE_KEYS[`${faction}_${type}`] || `${faction}_command`;
+  const key = BUILDING_SPRITE_KEYS[`${faction}_${type}`];
+  if (key) return key;
+  // Fallback: use the parent faction's command center sprite
+  const parentFaction = [Faction.BRITAIN, Faction.GERMANY, Faction.FRANCE, Faction.KOREA].includes(faction)
+    ? Faction.USA
+    : [Faction.CUBA, Faction.LIBYA, Faction.IRAQ].includes(faction)
+    ? Faction.SOVIET
+    : faction;
+  return BUILDING_SPRITE_KEYS[`${parentFaction}_command`] || 'usa_command';
 }

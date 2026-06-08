@@ -22,6 +22,7 @@ import {
   VictoryConditionType,
 } from '../types';
 import { getFactionGroup } from '../types';
+import { FACTION_BONUSES } from '../game/systems/FactionSystem';
 import { BUILDINGS_BY_FACTION, UNITS_BY_FACTION } from '../game/systems/AIUnitLookup';
 import { GameSpeed } from '../game/engine/GameEngine';
 import { AIController } from '../game/systems/AIController';
@@ -34,6 +35,7 @@ import { mapManager } from '../game/map/MapManager';
 import { PowerSystem } from '../game/systems/PowerSystem';
 import { ProductionSystem } from '../game/systems/ProductionSystem';
 import { MovementSystem } from '../game/systems/MovementSystem';
+import { PathfindingManager } from '../game/systems/PathfindingManager';
 import { HarvestSystem } from '../game/systems/HarvestSystem';
 import { VictoryConditionSystem } from '../game/systems/VictoryConditionSystem';
 import { RepairSystem } from '../game/systems/RepairSystem';
@@ -80,6 +82,7 @@ const DEFAULT_GAME_SETTINGS: GameSettings = {
 const powerSystem = new PowerSystem();
 const productionSystem = new ProductionSystem();
 const movementSystem = new MovementSystem();
+const pathfindingManager = new PathfindingManager();
 const harvestSystem = new HarvestSystem();
 const victoryConditionSystem = new VictoryConditionSystem();
 const repairSystem = new RepairSystem();
@@ -163,13 +166,12 @@ interface GameStore {
   getLogs: (level?: LogLevel, limit?: number) => LogEntry[];
   clearLogs: () => void;
   destroyBuilding: (buildingId: string) => void;
-  damageBuilding: (buildingId: string, damage: number) => void;
+  damageBuilding: (buildingId: string, damage: number, damageType?: DamageType) => void;
   updateResources: (playerId: string, amount: number) => void;
   update: (deltaTime: number) => void;
   updateAI: () => void;
   addToBuildQueue: (item: BuildQueueItem) => void;
   removeFromBuildQueue: (itemId: string) => void;
-  processBuildQueue: (deltaTime: number) => void;
   getAllPlayers: () => Player[];
   getPlayerById: (playerId: string) => Player | null;
   setUnitWaypoints: (unitId: string, waypoints: Vector2[], state: UnitState) => void;
@@ -177,6 +179,7 @@ interface GameStore {
   buildStructureForPlayer: (playerId: string, buildingType: BuildingType, position: Vector2) => void;
   produceUnitForPlayer: (playerId: string, buildingId: string, unitType: UnitType) => void;
   repairBuildingForPlayer: (playerId: string, buildingId: string) => void;
+  sellBuildingForPlayer: (playerId: string, buildingId: string) => void;
   setRallyPointForPlayer: (playerId: string, buildingId: string, position: Vector2 | null) => void;
   upgradeBuildingForPlayer: (playerId: string, buildingId: string) => void;
   findUnitOwner: (unitId: string) => Player | null;
@@ -229,6 +232,7 @@ interface GameStore {
   setUnitStance: (unitIds: string[], stance: UnitStance) => void;
   selectIdleMiners: () => void;
   selectIdleMilitary: () => void;
+  surrender: () => void;
   maxUnits: number;
   gameSettings: GameSettings;
   setGameSettings: (settings: Partial<GameSettings>) => void;
@@ -292,6 +296,9 @@ function createUnitInternal(type: UnitType, faction: Faction, position: Vector2,
     if (researchedUpgrades.includes(UpgradeType.CONSCRIPT_ATTACK)) {
       attack = Math.floor(attack * 1.15);
     }
+    if (researchedUpgrades.includes(UpgradeType.ELITE_FORCES)) {
+      attack = Math.floor(attack * 1.1);
+    }
   }
 
   if (type === UnitType.ROCKET || type === UnitType.FLAKINFANTRY) {
@@ -316,6 +323,21 @@ function createUnitInternal(type: UnitType, faction: Faction, position: Vector2,
     if (researchedUpgrades.includes(UpgradeType.ADVANCED_ARTILLERY)) {
       attack = Math.floor(attack * 1.25);
     }
+    if (researchedUpgrades.includes(UpgradeType.PRISM_TECH) && type === UnitType.PRISM) {
+      attack = Math.floor(attack * 1.15);
+    }
+    if (researchedUpgrades.includes(UpgradeType.TESLA_WEAPONS) && type === UnitType.TESLA) {
+      attack = Math.floor(attack * 1.2);
+    }
+  }
+
+  // Apply faction bonuses
+  const factionBonus = FACTION_BONUSES[faction];
+  if (factionBonus) {
+    attack = Math.floor(attack * factionBonus.attack);
+    armor = Math.floor(armor * factionBonus.defense);
+    speed = speed * factionBonus.speed;
+    attackRange = Math.floor(attackRange * factionBonus.vision);
   }
 
   return {
@@ -330,8 +352,8 @@ function createUnitInternal(type: UnitType, faction: Faction, position: Vector2,
     attackRange,
     attackSpeed: data.attackSpeed,
     speed,
-    vision: data.vision,
-    cost: data.cost,
+    vision: factionBonus ? Math.floor(data.vision * factionBonus.vision) : data.vision,
+    cost: factionBonus ? Math.floor(data.cost * factionBonus.unitCost) : data.cost,
     buildTime: data.buildTime,
     state: UnitState.IDLE,
     target: null,
@@ -379,6 +401,8 @@ function createBuildingFromData(type: BuildingType, faction: Faction, position: 
 }
 
 function createBuildingInternal(type: BuildingType, faction: Faction, position: Vector2, data: BuildingData): Building {
+  // Apply faction building cost bonus
+  const factionBonus = FACTION_BONUSES[faction];
 
   return {
     id: `${faction}_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -387,9 +411,9 @@ function createBuildingInternal(type: BuildingType, faction: Faction, position: 
     position: { ...position },
     health: data.health,
     maxHealth: data.health,
-    powerOutput: data.powerOutput,
+    powerOutput: factionBonus ? Math.floor(data.powerOutput * factionBonus.powerEfficiency) : data.powerOutput,
     powerConsumption: data.powerConsumption,
-    cost: data.cost,
+    cost: factionBonus ? Math.floor(data.cost * factionBonus.buildingCost) : data.cost,
     buildTime: data.buildTime,
     width: data.width,
     height: data.height,
@@ -704,6 +728,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
     mapManager.initialize(map);
 
+    // Initialize pathfinding grid from map data
+    pathfindingManager.initialize(map, { tileSize: GAME_CONFIG.TILE_SIZE });
+    movementSystem.setPathfindingManager(pathfindingManager);
+
     // Helper to generate ore fields around a position
     const generateOreField = (centerX: number, centerY: number, count: number) => {
       for (let i = 0; i < count; i++) {
@@ -982,7 +1010,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             unit.target = null;
             unit.isAttackMoving = false;
           } else {
-            unit.waypoints = [{ ...position }];
+            // Use A* pathfinding for intelligent route planning
+            movementSystem.requestPath(unit, position.x, position.y);
             unit.state = UnitState.MOVING;
             unit.target = null;
             unit.isAttackMoving = false;
@@ -1002,10 +1031,22 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       for (const player of allPlayers) {
         const unit = player.units.find(u => u.id === unitId);
         if (unit) {
-          unit.waypoints = [{ ...position }];
-          unit.state = UnitState.MOVING;
-          unit.target = null;
-          unit.isAttackMoving = true;
+          if (unit.type === UnitType.CHRONO) {
+            // Chrono Legionnaire: teleport instead of walking
+            if (unit.isChronoCooldown) return;
+            unit.chronoShiftTarget = { ...position };
+            unit.chronoShiftTimer = 2.0;
+            unit.isChronoShifting = true;
+            unit.state = UnitState.MOVING;
+            unit.target = null;
+            unit.isAttackMoving = true;
+          } else {
+            // Use A* pathfinding for intelligent route planning
+            movementSystem.requestPath(unit, position.x, position.y);
+            unit.state = UnitState.MOVING;
+            unit.target = null;
+            unit.isAttackMoving = true;
+          }
           if (player === state.currentPlayer) {
             gameEventBus.emit('unit:move', { unitId, position });
           }
@@ -1045,7 +1086,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           unit.target = null;
           unit.isAttackMoving = false;
         } else {
-          unit.waypoints = [{ ...target }];
+          // Use A* pathfinding for intelligent route planning
+          movementSystem.requestPath(unit, target.x, target.y);
           unit.state = UnitState.MOVING;
           unit.target = null;
           unit.isAttackMoving = false;
@@ -1073,7 +1115,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           unit.target = null;
           unit.isAttackMoving = false;
         } else {
-          unit.waypoints = [{ ...pos }];
+          // Use A* pathfinding for intelligent route planning
+          movementSystem.requestPath(unit, pos.x, pos.y);
           unit.state = UnitState.MOVING;
           unit.target = null;
           unit.isAttackMoving = false;
@@ -1106,7 +1149,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       // Single unit: attack-move directly
       if (foundUnits.length === 1) {
         const unit = foundUnits[0];
-        unit.waypoints = [{ ...target }];
+        movementSystem.requestPath(unit, target.x, target.y);
         unit.state = UnitState.MOVING;
         unit.target = null;
         unit.isAttackMoving = true;
@@ -1124,7 +1167,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         const pos = formationMap.get(unit.id);
         if (!pos) continue;
 
-        unit.waypoints = [{ ...pos }];
+        movementSystem.requestPath(unit, pos.x, pos.y);
         unit.state = UnitState.MOVING;
         unit.target = null;
         unit.isAttackMoving = true;
@@ -1140,24 +1183,32 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     set((state) => {
       const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
       let attacker: Unit | null = null;
+      let attackerPlayer: Player | null = null;
       let targetUnit: Unit | null = null;
       let targetBuilding: Building | null = null;
+      let targetOwner: Player | null = null;
 
       for (const player of allPlayers) {
         const u = player.units.find(u => u.id === attackerId);
-        if (u) { attacker = u; }
+        if (u) { attacker = u; attackerPlayer = player; }
         const tu = player.units.find(u => u.id === targetId);
-        if (tu) targetUnit = tu;
+        if (tu) { targetUnit = tu; targetOwner = player; }
         const tb = player.buildings.find(b => b.id === targetId);
-        if (tb) targetBuilding = tb;
+        if (tb) { targetBuilding = tb; targetOwner = player; }
       }
 
-      if (attacker && (targetUnit || targetBuilding)) {
-        attacker.state = UnitState.ATTACKING;
-        attacker.target = targetId;
-        attacker.waypoints = [];
-        gameEventBus.emit('unit:attack', { attackerId, targetId });
+      if (!attacker || !attackerPlayer || !(targetUnit || targetBuilding)) return;
+
+      // Validate: cannot attack own units/buildings or allies
+      if (targetOwner) {
+        if (targetOwner.id === attackerPlayer.id) return;
+        if (attackerPlayer.teamId !== undefined && targetOwner.teamId === attackerPlayer.teamId) return;
       }
+
+      attacker.state = UnitState.ATTACKING;
+      attacker.target = targetId;
+      attacker.waypoints = [];
+      gameEventBus.emit('unit:attack', { attackerId, targetId });
     });
   },
 
@@ -1191,8 +1242,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
   destroyUnit: (unitId) => {
     // Check for terrorist death explosion before removing
-    let terroristExplosion: { position: Vector2; faction: Faction } | null = null;
-    // Collect passenger IDs to destroy when transport is destroyed
+    let terroristExplosion: { position: Vector2; faction: Faction; teamId?: number } | null = null;
     let passengerIdsToDestroy: string[] = [];
     // If the destroyed unit was inside a transport, remove it from passenger list
     let transportIdToClean: string | undefined;
@@ -1201,8 +1251,9 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
       for (const player of allPlayers) {
         const unit = player.units.find(u => u.id === unitId);
-        if (unit && unit.type === UnitType.TERRORIST) {
-          terroristExplosion = { position: { ...unit.position }, faction: unit.faction };
+        // Only trigger death explosion if terrorist hasn't already exploded via CombatUpdateSystem
+        if (unit && unit.type === UnitType.TERRORIST && !(unit as unknown as Record<string, unknown>)._terroristExploded) {
+          terroristExplosion = { position: { ...unit.position }, faction: unit.faction, teamId: player.teamId };
         }
         // If this unit is a transport with passengers, mark passengers for destruction
         if (unit && unit.passengers && unit.passengers.length > 0) {
@@ -1244,6 +1295,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       }
     });
 
+    movementSystem.removeUnit(unitId);
+
     // Destroy all passengers when transport is destroyed
     for (const passengerId of passengerIdsToDestroy) {
       get().destroyUnit(passengerId);
@@ -1262,7 +1315,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         // Find the terrorist's owner player for enemiesDestroyed tracking
         const terroristOwner = allPlayers.find(p => p.faction === terroristExplosion!.faction);
         for (const player of allPlayers) {
-          if (player.faction === terroristExplosion!.faction) continue;
+          // Skip allies (use teamId-based check, not faction)
+          if (terroristExplosion!.teamId !== undefined && player.teamId !== undefined && terroristExplosion!.teamId === player.teamId) continue;
           for (const unit of [...player.units]) {
             const dx = unit.position.x - terroristExplosion!.position.x;
             const dy = unit.position.y - terroristExplosion!.position.y;
@@ -1284,6 +1338,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
               const actualDamage = combatSystem.calculateDamage(explosionDamage, DamageType.EXPLOSIVE, ArmorType.STRUCTURE, 0);
               building.health -= actualDamage;
               gameEventBus.emit('combat:hit', { attackerId: '', targetId: building.id, damage: actualDamage, position: building.position });
+              gameEventBus.emit('building:damaged', { buildingId: building.id, buildingType: building.type, health: building.health, maxHealth: building.maxHealth, position: building.position });
               if (building.health <= 0) {
                 destroyedBuildingsByExplosion.push(building.id);
                 explosionKillCount++;
@@ -1349,14 +1404,21 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     }
   },
 
-  damageBuilding: (buildingId, damage) => {
+  damageBuilding: (buildingId, damage, damageType?) => {
     let buildingDestroyed = false;
     set((state) => {
       const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
       for (const player of allPlayers) {
         const building = player.buildings.find(b => b.id === buildingId);
         if (building) {
-          building.health -= damage;
+          const actualDamage = combatSystem.calculateDamage(
+            damage,
+            damageType || DamageType.KINETIC,
+            ArmorType.STRUCTURE,
+            0
+          );
+          building.health -= actualDamage;
+          gameEventBus.emit('building:damaged', { buildingId: building.id, buildingType: building.type, health: building.health, maxHealth: building.maxHealth, position: building.position });
           if (building.health <= 0) {
             buildingDestroyed = true;
           }
@@ -1416,6 +1478,21 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         }
       }
 
+      // Update pathfinding dynamic obstacles from all units
+      const allUnits = allPlayers.flatMap(p => p.units);
+      pathfindingManager.updateDynamicObstacles(allUnits.map(u => ({
+        id: u.id,
+        position: u.position,
+        isAirborne: !!u.isAirborne,
+        isNaval: !!u.isNaval,
+      })));
+
+      // Update global combat state once per frame (game time, projectiles)
+      combatUpdateSystem.updateFrame(deltaTime, allPlayers,
+        (unitId: string) => { destroyedUnits.push(unitId); },
+        (buildingId: string) => { destroyedBuildings.push(buildingId); }
+      );
+
       for (const player of allPlayers) {
         powerSystem.update(player);
 
@@ -1433,9 +1510,9 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
               unit.chronoShiftTarget = undefined;
               unit.isChronoShifting = false;
               unit.isChronoCooldown = true;
-              unit.chronoShiftTimer = 3.0; // 3 second cooldown
+              unit.chronoShiftTimer = player.researchedUpgrades.includes(UpgradeType.CHRONO_TECH) ? 2.1 : 3.0; // CHRONO_TECH reduces cooldown by 30%
               unit.state = UnitState.IDLE;
-              gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position } });
+              gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position }, faction: player.faction });
             }
           }
 
@@ -1505,7 +1582,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           }
 
           // Iron Curtain invulnerability expiry
-          if (unit.isInvulnerable && unit.invulnerableUntil && Date.now() >= unit.invulnerableUntil) {
+          if (unit.isInvulnerable && unit.invulnerableUntil && state.gameTime >= unit.invulnerableUntil) {
             unit.isInvulnerable = false;
             unit.invulnerableUntil = undefined;
           }
@@ -1525,6 +1602,16 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           }
         }
 
+        // Sync passenger positions with their transport vehicles
+        for (const unit of player.units) {
+          if (unit.transportId && unit.state === UnitState.IDLE) {
+            const transport = player.units.find(u => u.id === unit.transportId);
+            if (transport) {
+              unit.position = { ...transport.position };
+            }
+          }
+        }
+
         // Auto-engage: idle combat units attack nearby enemies
         autoEngageSys.update(player, allPlayers);
         // Auto-harvest: idle miners find ore and harvest
@@ -1535,14 +1622,14 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           attackWaveSys.update(player, allPlayers, deltaTime, aiDiff);
         }
         // Engineer capture: auto-capture nearby enemy buildings
-        captureSystem.update(player, allPlayers, state.neutralBuildings, (event) => {
+        captureSystem.update(player, allPlayers, state.neutralBuildings, deltaTime, (event) => {
           get().captureBuilding(event.engineerId, event.buildingId);
         });
 
         // Building construction progress
         for (const building of player.buildings) {
           // Clear expired EMP disable
-          if (building.empDisabledUntil && building.empDisabledUntil <= Date.now()) {
+          if (building.empDisabledUntil && building.empDisabledUntil <= state.gameTime) {
             building.empDisabledUntil = undefined;
           }
 
@@ -1570,7 +1657,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             const aiSpeedMult = player.isAI
               ? (AI_CONFIG.BUILD_SPEED[((player.difficulty || Difficulty.NORMAL).toString().toLowerCase()) as keyof typeof AI_CONFIG.BUILD_SPEED] || 1)
               : 1;
-            building.buildProgress += GAME_CONFIG.BUILD_SPEED * deltaTime * powerModifier * aiSpeedMult;
+            const weatherBuildMod = get().weatherBuildModifier;
+            building.buildProgress += GAME_CONFIG.BUILD_SPEED * deltaTime * powerModifier * aiSpeedMult * weatherBuildMod;
             building.health = Math.min(
               building.maxHealth,
               Math.ceil(building.maxHealth * (GAME_CONFIG.BUILD_START_HP_RATIO + building.buildProgress * (1 - GAME_CONFIG.BUILD_START_HP_RATIO)))
@@ -1595,10 +1683,21 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           // Superweapon charging
           if (building.superweaponChargeTime && building.isConstructed && !building.empDisabledUntil) {
             if (!building.superweaponChargeProgress) building.superweaponChargeProgress = 0;
+            const wasReady = building.superweaponReady;
             building.superweaponChargeProgress += deltaTime;
             if (building.superweaponChargeProgress >= building.superweaponChargeTime) {
               building.superweaponReady = true;
               building.superweaponChargeProgress = building.superweaponChargeTime;
+              if (!wasReady) {
+                gameEventBus.emit('superweapon:launch', { buildingId: building.id, type: building.type, faction: building.faction, position: building.position });
+              }
+            } else {
+              // Emit charging event at 25%, 50%, 75% milestones
+              const prevPct = Math.floor(((building.superweaponChargeProgress - deltaTime) / building.superweaponChargeTime) * 4);
+              const curPct = Math.floor((building.superweaponChargeProgress / building.superweaponChargeTime) * 4);
+              if (curPct > prevPct && curPct >= 1) {
+                gameEventBus.emit('superweapon:charging', { buildingId: building.id, type: building.type, faction: building.faction, progress: curPct / 4, position: building.position });
+              }
             }
           }
         }
@@ -1689,11 +1788,13 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           // If only one AI remains, the battle is over
           const remainingAi = state.aiPlayers.filter(ai => !ai.isDefeated);
           if (remainingAi.length <= 1 && state.aiPlayers.length >= 2) {
-            const winner = remainingAi[0];
+            const winner = remainingAi.length === 1 ? remainingAi[0] : null;
             if (winner) {
               winner.isVictorious = true;
+              gameEventBus.emit('game:victory', { faction: winner.faction });
+            } else {
+              gameEventBus.emit('game:victory', { faction: Faction.NEUTRAL });
             }
-            gameEventBus.emit('game:victory', { faction: winner?.faction || Faction.NEUTRAL });
             state.gameState = GameState.VICTORY;
             return;
           }
@@ -1866,7 +1967,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           if (crateCount < GAME_CONFIG.CRATE_MAX_COUNT) {
             const spawnX = 5 + Math.random() * (state.map.width - 10);
             const spawnY = 5 + Math.random() * (state.map.height - 10);
-            const crateTypes: Array<'money' | 'heal' | 'veterancy'> = ['money', 'heal', 'veterancy'];
+            const crateTypes: Array<'money' | 'heal' | 'veterancy' | 'reveal'> = ['money', 'heal', 'veterancy', 'reveal'];
             const crateType = crateTypes[Math.floor(Math.random() * crateTypes.length)];
             state.map.resourceNodes.push({
               id: `crate_${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -1901,6 +2002,9 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
                     } else if (unit.rank === UnitRank.VETERAN) {
                       unit.rank = UnitRank.ELITE;
                     }
+                  } else if (crate.crateType === 'reveal') {
+                    // Reveal a large area around the crate via event
+                    gameEventBus.emit('map:reveal', { position: { x: crate.position.x, y: crate.position.y }, radius: 10 });
                   }
                   // Remove crate
                   state.map.resourceNodes = state.map.resourceNodes.filter(r => r.id !== crate.id);
@@ -2029,41 +2133,21 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     });
   },
 
-  processBuildQueue: (deltaTime) => {
-    set((state) => {
-      if (!state.currentPlayer || state.currentPlayer.buildQueue.length === 0) return;
-
-      const currentItem = state.currentPlayer.buildQueue[0];
-      const isLowPower = state.currentPlayer.power < GAME_CONFIG.LOW_POWER_THRESHOLD;
-      const speedModifier = isLowPower ? GAME_CONFIG.POWER_SLOWDOWN_FACTOR : 1;
-      currentItem.progress += deltaTime * speedModifier;
-
-      if (currentItem.progress >= currentItem.totalTime) {
-        if (typeof currentItem.type === 'string' && currentItem.type in UnitType) {
-          const building = state.currentPlayer.buildings.find(b => b.id === currentItem.producerId);
-          if (building) {
-            const spawnPos = building.rallyPoint
-              ? { ...building.rallyPoint }
-              : { x: building.position.x + building.width * GAME_CONFIG.TILE_SIZE, y: building.position.y };
-            state.currentPlayer.units.push(
-              createUnitFromData(currentItem.type as UnitType, building.faction, spawnPos, state.currentPlayer!.researchedUpgrades)
-            );
-            state.currentPlayer.statistics.unitsProduced++;
-            gameEventBus.emit('unit:produced', { unitType: currentItem.type, faction: building.faction, position: spawnPos });
-          }
-        }
-        state.currentPlayer.buildQueue.shift();
-      }
-    });
-  },
-
   sellBuilding: (buildingId) => {
     let shouldDestroy = false;
     set((state) => {
       const building = state.currentPlayer?.buildings.find(b => b.id === buildingId);
       if (building && state.currentPlayer) {
-        if (!building.isConstructed) return; // Cannot sell unconstructed buildings
-        const healthRatio = building.health / building.maxHealth;
+        if (!building.isConstructed) {
+          // Cancel construction: refund a portion of the cost
+          const buildTime = building.data.buildTime || 1;
+          const refund = Math.floor(building.data.cost * 0.5 * (building.buildProgress / buildTime));
+          state.currentPlayer.money += refund;
+          shouldDestroy = true;
+          return;
+        }
+        const maxHealth = building.maxHealth || 1;
+        const healthRatio = building.health / maxHealth;
         const sellValue = Math.floor(building.data.cost * GAME_CONFIG.SELL_PRICE_RATIO * healthRatio);
         state.currentPlayer.money += sellValue;
         shouldDestroy = true;
@@ -2191,7 +2275,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
       if (building && unitData && player.money >= unitData.cost) {
         // Check if building is EMP-disabled
-        if (building.empDisabledUntil && building.empDisabledUntil > Date.now()) {
+        if (building.empDisabledUntil && building.empDisabledUntil > get().gameTime) {
           gameEventBus.emit('ui:notification', { message: '建筑被EMP瘫痪，无法生产单位', type: 'warning' });
           return;
         }
@@ -2250,6 +2334,35 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         building.isRepairing = true;
       }
     });
+  },
+
+  sellBuildingForPlayer: (playerId, buildingId) => {
+    let shouldDestroy = false;
+    set((state) => {
+      const player = state.currentPlayer?.id === playerId
+        ? state.currentPlayer
+        : state.aiPlayers.find(p => p.id === playerId);
+      if (!player) return;
+
+      const building = player.buildings.find(b => b.id === buildingId);
+      if (!building) return;
+
+      if (!building.isConstructed) {
+        const buildTime = building.data.buildTime || 1;
+        const refund = Math.floor(building.data.cost * 0.5 * (building.buildProgress / buildTime));
+        player.money += refund;
+        shouldDestroy = true;
+        return;
+      }
+      const maxHealth = building.maxHealth || 1;
+      const healthRatio = building.health / maxHealth;
+      const sellValue = Math.floor(building.data.cost * GAME_CONFIG.SELL_PRICE_RATIO * healthRatio);
+      player.money += sellValue;
+      shouldDestroy = true;
+    });
+    if (shouldDestroy) {
+      get().destroyBuilding(buildingId);
+    }
   },
 
   setRallyPointForPlayer: (playerId, buildingId, position) => {
@@ -2445,13 +2558,26 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
       if (!capturedBuilding) return;
 
-      // Find the new owner
-      const newOwner = oldOwner?.id === capturerId
-        ? null
-        : ([state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[]).find(p => p.id === capturerId);
+      // Find the engineer (capturer) unit and its owner
+      let engineerUnit: Unit | null = null;
+      let newOwner: Player | null = null;
+      for (const player of [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[]) {
+        const unit = player.units.find(u => u.id === capturerId);
+        if (unit) {
+          engineerUnit = unit;
+          newOwner = player;
+          break;
+        }
+      }
 
-      if (!newOwner) return;
+      if (!engineerUnit || !newOwner) return;
       if (oldOwner && newOwner.id === oldOwner.id) return;
+
+      // Distance check: engineer must be within capture range
+      const dx = engineerUnit.position.x - capturedBuilding.position.x;
+      const dy = engineerUnit.position.y - capturedBuilding.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > GAME_CONFIG.TILE_SIZE * 3) return;
 
       // Transfer the building
       if (oldOwner) {
@@ -2546,6 +2672,16 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         return;
       }
 
+      // Check prerequisite upgrades
+      if (upgrade.prerequisites && upgrade.prerequisites.length > 0) {
+        const missingPrereqs = upgrade.prerequisites.filter(p => !state.currentPlayer!.researchedUpgrades.includes(p));
+        if (missingPrereqs.length > 0) {
+          const missingNames = missingPrereqs.map(p => UPGRADES[p]?.name || p).join(', ');
+          gameEventBus.emit('ui:notification', { message: `需要先研究: ${missingNames}`, type: 'warning' });
+          return;
+        }
+      }
+
       // Only one research at a time
       if (state.currentPlayer.researchQueue.length >= 1) {
         gameEventBus.emit('ui:notification', { message: '已有研究正在进行', type: 'warning' });
@@ -2595,6 +2731,12 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         player.buildings.some(b => b.type === req && b.isConstructed)
       );
       if (!hasAllRequired) return;
+
+      // Check prerequisite upgrades
+      if (upgrade.prerequisites && upgrade.prerequisites.length > 0) {
+        const missingPrereqs = upgrade.prerequisites.filter(p => !player.researchedUpgrades.includes(p));
+        if (missingPrereqs.length > 0) return;
+      }
 
       // Only one research at a time
       if (player.researchQueue.length >= 1) return;
@@ -2699,6 +2841,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       unit.state = UnitState.IDLE;
       unit.target = null;
       unit.waypoints = [];
+      unit.position = { ...transport.position }; // Sync position with transport
       transport.passengers.push(unitId);
 
       gameEventBus.emit('transport:load', { unitId, transportId });
@@ -2719,13 +2862,19 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
       const unloadPos = position || { ...transport.position };
 
+      // Clamp unload position to map bounds
+      const mapWidth = (state.map?.width || 100) * GAME_CONFIG.TILE_SIZE;
+      const mapHeight = (state.map?.height || 100) * GAME_CONFIG.TILE_SIZE;
+      const clampedX = Math.max(GAME_CONFIG.TILE_SIZE, Math.min(mapWidth - GAME_CONFIG.TILE_SIZE, unloadPos.x));
+      const clampedY = Math.max(GAME_CONFIG.TILE_SIZE, Math.min(mapHeight - GAME_CONFIG.TILE_SIZE, unloadPos.y));
+
       // Unload all passengers
       for (const passengerId of [...transport.passengers]) {
         for (const player of allPlayers) {
           const unit = player.units.find(u => u.id === passengerId);
           if (unit) {
             unit.transportId = undefined;
-            unit.position = { ...unloadPos };
+            unit.position = { x: clampedX, y: clampedY };
             unit.state = UnitState.IDLE;
             unit.target = null;
             unit.waypoints = [];
@@ -2746,8 +2895,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         const building = player.buildings.find(b => b.id === buildingId);
         if (building && building.productionQueue && building.productionQueue.length > queueIndex) {
           const item = building.productionQueue[queueIndex];
-          // Refund cost
-          player.money += item.cost;
+          // Progressive refund: 100% at start, decreasing to 50% at completion
+          const refundRate = 1 - (item.progress / item.totalTime) * 0.5;
+          const refund = Math.floor(item.cost * refundRate);
+          player.money += refund;
           // Remove from queue
           building.productionQueue.splice(queueIndex, 1);
 
@@ -2809,12 +2960,15 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         building.superweaponReady = false;
         building.superweaponChargeProgress = 0;
 
+        // Nuclear strike effects handled by superweapon:activated event
+
         const nuclearRadius = 8 * GAME_CONFIG.TILE_SIZE;
         const nuclearDamage = 500;
         let killCount = 0;
 
         // Deal massive damage to all entities in radius (enemies and friendly)
         for (const p of allPlayers) {
+          const isEnemy = p.id !== player.id && !(player.teamId !== undefined && p.teamId === player.teamId);
           for (const unit of [...p.units]) {
             const dx = unit.position.x - targetPosition.x;
             const dy = unit.position.y - targetPosition.y;
@@ -2826,7 +2980,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
               gameEventBus.emit('combat:hit', { attackerId: buildingId, targetId: unit.id, damage: actualDamage, position: unit.position });
               if (unit.health <= 0) {
                 destroyedUnits.push(unit.id);
-                killCount++;
+                if (isEnemy) killCount++;
               }
             }
           }
@@ -2839,7 +2993,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
               gameEventBus.emit('combat:hit', { attackerId: buildingId, targetId: b.id, damage: actualDamage, position: b.position });
               if (b.health <= 0) {
                 destroyedBuildings.push(b.id);
-                killCount++;
+                if (isEnemy) killCount++;
               }
             }
           }
@@ -2871,6 +3025,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         building.superweaponReady = false;
         building.superweaponChargeProgress = 0;
 
+        // Iron curtain effects handled by superweapon:activated event
+
         const curtainRadius = 5 * GAME_CONFIG.TILE_SIZE;
         const invulnerableDuration = 20000; // 20 seconds in ms
 
@@ -2880,7 +3036,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           const dy = unit.position.y - targetPosition.y;
           if (Math.sqrt(dx * dx + dy * dy) <= curtainRadius) {
             unit.isInvulnerable = true;
-            unit.invulnerableUntil = Date.now() + invulnerableDuration;
+            unit.invulnerableUntil = get().gameTime + invulnerableDuration / 1000;
           }
         }
 
@@ -2902,6 +3058,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         building.superweaponReady = false;
         building.superweaponChargeProgress = 0;
 
+        // Chronosphere effects handled by superweapon:activated event
+
         const chronoRadius = 5 * GAME_CONFIG.TILE_SIZE;
 
         // Teleport all friendly units from source area to target area
@@ -2912,14 +3070,16 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             // Offset from source center to maintain formation
             const offsetX = unit.position.x - sourcePosition.x;
             const offsetY = unit.position.y - sourcePosition.y;
-            unit.position = {
-              x: targetPosition.x + offsetX,
-              y: targetPosition.y + offsetY,
-            };
+            // Clamp to map boundaries
+            const mapWidth = state.map ? state.map.width * GAME_CONFIG.TILE_SIZE : Infinity;
+            const mapHeight = state.map ? state.map.height * GAME_CONFIG.TILE_SIZE : Infinity;
+            const newX = Math.max(0, Math.min(mapWidth - GAME_CONFIG.TILE_SIZE, targetPosition.x + offsetX));
+            const newY = Math.max(0, Math.min(mapHeight - GAME_CONFIG.TILE_SIZE, targetPosition.y + offsetY));
+            unit.position = { x: newX, y: newY };
             unit.state = UnitState.IDLE;
             unit.target = null;
             unit.waypoints = [];
-            gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position } });
+            gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position }, faction: player.faction });
           }
         }
 
@@ -3070,6 +3230,31 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     });
   },
 
+  surrender: () => {
+    set((state) => {
+      if (!state.currentPlayer || state.currentPlayer.isDefeated) return;
+      if (state.gameState !== GameState.PLAYING) return;
+      state.currentPlayer.isDefeated = true;
+      gameEventBus.emit('game:defeat', { faction: state.currentPlayer.faction });
+      if (state.isCampaignMode) {
+        state.missionResult = 'defeat';
+        state.missionStats = {
+          time: state.gameTime,
+          unitsProduced: state.currentPlayer.statistics.unitsProduced,
+          unitsLost: state.currentPlayer.statistics.unitsLost,
+          enemiesDestroyed: state.currentPlayer.statistics.enemiesDestroyed,
+          buildingsBuilt: state.currentPlayer.statistics.buildingsBuilt,
+          buildingsLost: state.currentPlayer.statistics.buildingsLost,
+          resourcesGathered: state.currentPlayer.statistics.resourcesGathered,
+          rating: 0,
+        };
+        state.gameState = GameState.MISSION_DEBRIEFING;
+      } else {
+        state.gameState = GameState.DEFEAT;
+      }
+    });
+  },
+
   setGameSettings: (settings) => {
     set((state) => {
       Object.assign(state.gameSettings, settings);
@@ -3081,11 +3266,18 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     if (!state.currentPlayer) return;
 
     const stats = state.currentPlayer.statistics;
+    const playerFaction = state.currentPlayer.faction;
     const unlocked = new Set(state.unlockedAchievements);
     let newlyUnlocked: Achievement | null = null;
 
     for (const achievement of ACHIEVEMENTS) {
       if (unlocked.has(achievement.id)) continue;
+      // Check faction requirement
+      if (achievement.factionRequired) {
+        const isAllied = ['USA', 'BRITAIN', 'GERMANY', 'FRANCE', 'KOREA'].includes(playerFaction);
+        if (achievement.factionRequired === 'allied' && !isAllied) continue;
+        if (achievement.factionRequired === 'soviet' && isAllied) continue;
+      }
       if (achievement.condition(stats)) {
         unlocked.add(achievement.id);
         newlyUnlocked = achievement;
@@ -3168,9 +3360,15 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       missionStats: null,
     });
     attackWaveSys.reset();
+    combatSystem.reset();
+    combatUpdateSystem.reset();
+    captureSystem.reset();
+    movementSystem.reset();
     crateSpawnTimer = 0;
     oreRegenTimer = 0;
     autoSaveTimer = 0;
+    lastFogUpdateTime = 0;
+    achievementCheckTimer = 0;
   },
 
   selectCampaign: (campaignId) => {

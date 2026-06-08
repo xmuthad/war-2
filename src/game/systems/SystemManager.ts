@@ -42,12 +42,18 @@ export class SystemManager {
   initialize(scene: Phaser.Scene): void {
     this.weatherSystem = new WeatherSystem(scene);
     this.weatherSystem.create();
-    this.weatherSystem.onWeatherEnd = () => this.onWeatherChange?.(null);
+    this.weatherSystem.onWeatherEnd = () => {
+      this.onWeatherChange?.(null);
+      useGameStore.getState().updateWeatherModifiers('clear');
+    };
     this.systems.set('weather', this.weatherSystem);
 
     this.dayNightCycle = new DayNightCycle(scene, DEFAULT_DAY_NIGHT_CONFIG);
     this.dayNightCycle.create();
-    this.dayNightCycle.onTimeChange(state => this.onTimeOfDayChange?.(state));
+    this.dayNightCycle.onTimeChange(state => {
+      this.onTimeOfDayChange?.(state);
+      useGameStore.getState().updateDayNightVisionModifier(state.currentTime);
+    });
     this.systems.set('dayNight', this.dayNightCycle);
 
     this.radarSystem = new RadarSystem(RADAR_CONFIG);
@@ -121,6 +127,7 @@ export class SystemManager {
   stopWeather(): void {
     this.weatherSystem?.stopWeather();
     this.onWeatherChange?.(null);
+    useGameStore.getState().updateWeatherModifiers('clear');
   }
 
   triggerAlert(level: AlertLevel, message: string, position?: { x: number; y: number }): string {

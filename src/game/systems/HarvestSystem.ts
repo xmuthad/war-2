@@ -34,7 +34,9 @@ function findNearestResource(unit: Unit, resources: ResourceNode[]): ResourceNod
   let minDist = Infinity;
   for (const resource of resources) {
     if (resource.amount > 0) {
-      const dist = distance(unit.position, resource.position);
+      // resource.position is in tile coordinates, unit.position is in world coordinates
+      const worldPos = { x: resource.position.x * GAME_CONFIG.TILE_SIZE, y: resource.position.y * GAME_CONFIG.TILE_SIZE };
+      const dist = distance(unit.position, worldPos);
       if (dist < minDist) {
         minDist = dist;
         nearest = resource;
@@ -77,6 +79,7 @@ export class HarvestSystem {
     if (!resource || resource.amount <= 0) {
       unit.state = UnitState.IDLE;
       unit.harvestTarget = null;
+      unit.waypoints = [];
       return;
     }
 
@@ -84,14 +87,12 @@ export class HarvestSystem {
     const harvestDist = distance(unit.position, resourcePos);
 
     if (harvestDist > GAME_CONFIG.TILE_SIZE * 2) {
-      const dx = resourcePos.x - unit.position.x;
-      const dy = resourcePos.y - unit.position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime;
-      const ratio = Math.min(1, moveSpeed / dist);
-      unit.position.x += dx * ratio;
-      unit.position.y += dy * ratio;
-      unit.direction = getDirectionFromDelta(dx, dy);
+      // Use waypoints for pathfinding-aware movement instead of direct position update
+      if (unit.waypoints.length === 0) {
+        unit.waypoints = [resourcePos];
+      }
+      // MovementSystem handles the actual movement via waypoints
+      return;
     } else {
       const harvestAmount = Math.min(GAME_CONFIG.HARVEST_AMOUNT * deltaTime, resource.amount, unit.cargoCapacity - unit.cargo);
       unit.cargo += harvestAmount;
@@ -131,20 +132,20 @@ export class HarvestSystem {
 
     if (!refinery) {
       unit.state = UnitState.IDLE;
+      unit.cargo = 0; // Clear cargo to prevent IDLE→RETURNING loop
+      unit.waypoints = [];
       return;
     }
 
     const refineryDist = distance(unit.position, refinery.position);
 
     if (refineryDist > GAME_CONFIG.TILE_SIZE * 3) {
-      const dx = refinery.position.x - unit.position.x;
-      const dy = refinery.position.y - unit.position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime;
-      const ratio = Math.min(1, moveSpeed / dist);
-      unit.position.x += dx * ratio;
-      unit.position.y += dy * ratio;
-      unit.direction = getDirectionFromDelta(dx, dy);
+      // Use waypoints for pathfinding-aware movement instead of direct position update
+      if (unit.waypoints.length === 0) {
+        unit.waypoints = [{ ...refinery.position }];
+      }
+      // MovementSystem handles the actual movement via waypoints
+      return;
     } else {
       const resourceMultiplier = unit.harvestTarget?.resourceType === 'gem' ? 75
         : unit.harvestTarget?.resourceType === 'crate' ? 100

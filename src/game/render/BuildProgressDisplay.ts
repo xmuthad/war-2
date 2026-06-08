@@ -195,6 +195,7 @@ export class BuildProgressDisplay {
 export class HarvestAnimation {
   private scene: Phaser.Scene;
   private harvestEffects: Map<string, Phaser.GameObjects.Container> = new Map();
+  private harvestTimers: Map<string, Phaser.Time.TimerEvent> = new Map();
   private config: HarvestAnimationConfig;
 
   constructor(scene: Phaser.Scene, config: Partial<HarvestAnimationConfig> = {}) {
@@ -231,11 +232,12 @@ export class HarvestAnimation {
     };
 
     drawBeam();
-    this.scene.time.addEvent({
+    const timer = this.scene.time.addEvent({
       delay: 100,
       callback: drawBeam,
       loop: true
     });
+    this.harvestTimers.set(id, timer);
 
     const resourceGlow = this.scene.add.circle(resourceX, resourceY, 25);
     resourceGlow.setFillStyle(this.config.resourceGlowColor, 0.3);
@@ -309,6 +311,11 @@ export class HarvestAnimation {
   }
 
   stopHarvest(id: string): void {
+    const timer = this.harvestTimers.get(id);
+    if (timer) {
+      timer.destroy();
+      this.harvestTimers.delete(id);
+    }
     const container = this.harvestEffects.get(id);
     if (container) {
       container.destroy();
@@ -317,6 +324,8 @@ export class HarvestAnimation {
   }
 
   stopAllHarvest(): void {
+    this.harvestTimers.forEach(timer => timer.destroy());
+    this.harvestTimers.clear();
     this.harvestEffects.forEach(container => container.destroy());
     this.harvestEffects.clear();
   }

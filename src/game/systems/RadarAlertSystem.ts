@@ -93,6 +93,7 @@ export class RadarSystem {
   private scanAngle: number = 0;
   private lastPingTime: number = 0;
   private enabled: boolean = true;
+  private elapsedTime: number = 0;
   private minimapScale: number = 1;
   private centerX: number = 0;
   private centerY: number = 0;
@@ -116,7 +117,7 @@ export class RadarSystem {
   addBlip(blip: Omit<RadarBlip, 'lastSeen' | 'intensity'>): void {
     const newBlip: RadarBlip = {
       ...blip,
-      lastSeen: Date.now(),
+      lastSeen: this.elapsedTime,
       intensity: 1
     };
 
@@ -134,7 +135,7 @@ export class RadarSystem {
     if (blip) {
       blip.x = x;
       blip.y = y;
-      blip.lastSeen = Date.now();
+      blip.lastSeen = this.elapsedTime;
       blip.intensity = 1;
     }
   }
@@ -147,12 +148,14 @@ export class RadarSystem {
   update(delta: number): void {
     if (!this.enabled) return;
 
+    this.elapsedTime += delta;
+
     this.scanAngle += this.config.scanSpeed * (delta / 1000);
     if (this.scanAngle >= Math.PI * 2) {
       this.scanAngle -= Math.PI * 2;
     }
 
-    const now = Date.now();
+    const now = this.elapsedTime;
 
     const expiredIds: string[] = [];
     this.blips.forEach((blip, id) => {

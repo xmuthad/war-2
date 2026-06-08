@@ -1164,6 +1164,137 @@ function generateBuilding(type, faction) {
     ctx.fillStyle = rgba(COLORS.common.tesla);
     ctx.fill();
   }
+  else if (type === 'helipad') {
+    drawRect(ctx, 15, 35, 98, 65, colors.primary);
+    drawRect(ctx, 17, 37, 94, 61, colors.secondary);
+    drawRect(ctx, 15, 35, 98, 8, colors.highlight);
+    // Helipad H marking
+    ctx.strokeStyle = rgba(colors.accent);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(50, 50);
+    ctx.lineTo(50, 80);
+    ctx.moveTo(78, 50);
+    ctx.lineTo(78, 80);
+    ctx.moveTo(50, 65);
+    ctx.lineTo(78, 65);
+    ctx.stroke();
+  }
+  else if (type === 'flame_tower') {
+    drawRect(ctx, 30, 50, 68, 50, colors.primary);
+    drawRect(ctx, 32, 52, 64, 46, colors.secondary);
+    drawRect(ctx, 55, 20, 18, 32, [180, 60, 20]);
+    drawRect(ctx, 57, 22, 14, 28, [220, 100, 30]);
+    // Flame
+    ctx.beginPath();
+    ctx.arc(64, 15, 10, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([255, 150, 50]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 12, 6, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([255, 220, 100]);
+    ctx.fill();
+  }
+  else if (type === 'turret') {
+    drawRect(ctx, 35, 55, 58, 45, colors.primary);
+    drawRect(ctx, 37, 57, 54, 41, colors.secondary);
+    // Gun barrel
+    drawRect(ctx, 60, 30, 8, 28, colors.highlight);
+    drawRect(ctx, 55, 25, 18, 8, colors.highlight);
+    // Sandbags
+    drawRect(ctx, 30, 65, 10, 10, [160, 140, 100]);
+    drawRect(ctx, 88, 65, 10, 10, [160, 140, 100]);
+  }
+  else if (type === 'nuclear_silo') {
+    drawRect(ctx, 15, 40, 98, 60, colors.primary);
+    drawRect(ctx, 17, 42, 94, 56, colors.secondary);
+    // Silo dome
+    ctx.beginPath();
+    ctx.arc(64, 42, 30, Math.PI, 0);
+    ctx.fillStyle = rgba(colors.secondary);
+    ctx.fill();
+    ctx.strokeStyle = rgba([50, 255, 50], 0.5);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Radiation symbol
+    ctx.beginPath();
+    ctx.arc(64, 42, 10, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([50, 255, 50], 0.7);
+    ctx.fill();
+  }
+  else if (type === 'iron_curtain') {
+    drawRect(ctx, 20, 35, 88, 65, colors.primary);
+    drawRect(ctx, 22, 37, 84, 61, colors.secondary);
+    drawRect(ctx, 20, 35, 88, 8, colors.highlight);
+    // Iron curtain coils
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(40 + i * 24, 55, 8, 0, Math.PI * 2);
+      ctx.strokeStyle = rgba([150, 150, 200]);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    drawRect(ctx, 55, 20, 18, 18, [150, 150, 200]);
+  }
+  else if (type === 'chronosphere') {
+    drawRect(ctx, 20, 40, 88, 55, colors.primary);
+    drawRect(ctx, 22, 42, 84, 51, colors.secondary);
+    // Chrono sphere
+    ctx.beginPath();
+    ctx.arc(64, 40, 22, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([100, 150, 255], 0.6);
+    ctx.fill();
+    ctx.strokeStyle = rgba([100, 200, 255]);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Inner rings
+    for (let i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(64, 40, 8 + i * 4, 0, Math.PI * 2);
+      ctx.strokeStyle = rgba([100, 200, 255], 0.3);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+  else if (type === 'naval_shipyard') {
+    drawRect(ctx, 10, 45, 108, 55, colors.primary);
+    drawRect(ctx, 12, 47, 104, 51, colors.secondary);
+    drawRect(ctx, 10, 45, 108, 8, colors.highlight);
+    // Crane
+    ctx.strokeStyle = rgba(colors.accent);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(30, 45);
+    ctx.lineTo(30, 15);
+    ctx.lineTo(70, 15);
+    ctx.stroke();
+    // Water line
+    ctx.strokeStyle = rgba([100, 150, 255], 0.5);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(10, 95);
+    ctx.lineTo(118, 95);
+    ctx.stroke();
+  }
+  else if (type === 'oil_derrick') {
+    drawRect(ctx, 40, 50, 48, 50, colors.primary);
+    drawRect(ctx, 42, 52, 44, 46, colors.secondary);
+    // Pump jack
+    ctx.strokeStyle = rgba([80, 80, 80]);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(64, 50);
+    ctx.lineTo(64, 20);
+    ctx.lineTo(85, 35);
+    ctx.stroke();
+  }
+  else if (type === 'hospital') {
+    drawRect(ctx, 20, 40, 88, 60, colors.primary);
+    drawRect(ctx, 22, 42, 84, 56, [240, 240, 240]);
+    // Red cross
+    drawRect(ctx, 56, 50, 16, 30, [220, 40, 40]);
+    drawRect(ctx, 48, 58, 32, 14, [220, 40, 40]);
+  }
 
   return canvas;
 }
@@ -1215,6 +1346,28 @@ async function main() {
   saveCanvas(generateTeslaTank(), path.join(outDir, 'units/soviet_tesla.png'));
   saveCanvas(generateApocalypse(), path.join(outDir, 'units/soviet_apocalypse.png'));
 
+  // 额外单位 - 复用现有生成器
+  saveCanvas(generateTank('allied'), path.join(outDir, 'units/allied_guardian.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_rhino.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_despot.png'));
+  saveCanvas(generateTank('allied'), path.join(outDir, 'units/allied_phantom.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_flak.png'));
+  saveCanvas(generateIFV('soviet'), path.join(outDir, 'units/soviet_apc.png'));
+  saveCanvas(generateSoldier('soviet'), path.join(outDir, 'units/soviet_conscript.png'));
+  saveCanvas(generateRocketSoldier('soviet'), path.join(outDir, 'units/soviet_flakinfantry.png'));
+  saveCanvas(generateSoldier('soviet'), path.join(outDir, 'units/soviet_terrorist.png'));
+  saveCanvas(generateSoldier('soviet'), path.join(outDir, 'units/soviet_ivan.png'));
+  saveCanvas(generateSniper('allied'), path.join(outDir, 'units/allied_seal.png'));
+  saveCanvas(generateSoldier('allied'), path.join(outDir, 'units/allied_chrono.png'));
+  saveCanvas(generateHelicopter('allied'), path.join(outDir, 'units/allied_blackhawk.png'));
+  saveCanvas(generateHelicopter('soviet'), path.join(outDir, 'units/soviet_kirov.png'));
+  saveCanvas(generateHelicopter('soviet'), path.join(outDir, 'units/soviet_yak.png'));
+
+  // 海军单位
+  saveCanvas(generateTank('allied'), path.join(outDir, 'units/allied_destroyer.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_submarine.png'));
+  saveCanvas(generateMiner('allied'), path.join(outDir, 'units/allied_transport_ship.png'));
+
   console.log('🏛️  生成建筑精灵图...');
   
   // 基础建筑
@@ -1245,10 +1398,21 @@ async function main() {
   saveCanvas(generateBuilding('defense', 'allied'), path.join(outDir, 'buildings/allied_defense.png'));
   saveCanvas(generateBuilding('defense', 'soviet'), path.join(outDir, 'buildings/soviet_defense.png'));
   saveCanvas(generateBuilding('teslacoil', 'soviet'), path.join(outDir, 'buildings/soviet_teslacoil.png'));
+  saveCanvas(generateBuilding('turret', 'allied'), path.join(outDir, 'buildings/allied_turret.png'));
+  saveCanvas(generateBuilding('flame_tower', 'soviet'), path.join(outDir, 'buildings/soviet_flame_tower.png'));
+  saveCanvas(generateBuilding('helipad', 'allied'), path.join(outDir, 'buildings/allied_helipad.png'));
+  saveCanvas(generateBuilding('helipad', 'soviet'), path.join(outDir, 'buildings/soviet_helipad.png'));
+  saveCanvas(generateBuilding('nuclear_silo', 'soviet'), path.join(outDir, 'buildings/soviet_nuclear_silo.png'));
+  saveCanvas(generateBuilding('iron_curtain', 'soviet'), path.join(outDir, 'buildings/soviet_iron_curtain.png'));
+  saveCanvas(generateBuilding('chronosphere', 'allied'), path.join(outDir, 'buildings/allied_chronosphere.png'));
+  saveCanvas(generateBuilding('naval_shipyard', 'allied'), path.join(outDir, 'buildings/allied_naval_shipyard.png'));
+  saveCanvas(generateBuilding('naval_shipyard', 'soviet'), path.join(outDir, 'buildings/soviet_naval_shipyard.png'));
+  saveCanvas(generateBuilding('oil_derrick', 'allied'), path.join(outDir, 'buildings/neutral_oil_derrick.png'));
+  saveCanvas(generateBuilding('hospital', 'allied'), path.join(outDir, 'buildings/neutral_hospital.png'));
 
   console.log('\n✅ 完整精灵图集生成完成！');
   console.log('📍 文件位置: public/assets/sprites/');
-  console.log('📊 单位: 16种 | 建筑: 25种 | 特效: ' + (FRAMES * 3) + '帧');
+  console.log('📊 单位: 16种 | 建筑: 41种 | 特效: ' + (FRAMES * 3) + '帧');
   console.log('🎮 请运行 npm run dev 查看效果');
 }
 

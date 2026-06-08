@@ -32,6 +32,7 @@ export interface GameRenderer {
 
   // Health
   setUnitHealth(id: string, health: number, maxHealth: number): void;
+  setUnitInvulnerable?(id: string, isInvulnerable: boolean): void;
   setBuildingHealth(id: string, health: number, maxHealth: number, oreStorage?: number, maxOreStorage?: number): void;
 
   // Rank

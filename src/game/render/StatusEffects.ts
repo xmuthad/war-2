@@ -105,6 +105,7 @@ export class UnitStatusIcons {
         scale: 0,
         duration: this.config.animationDuration,
         onComplete: () => {
+          if (!this.scene?.scene?.isActive()) return;
           container.remove(icon);
           icon.destroy();
         }
@@ -328,7 +329,7 @@ export class DamageNumbers {
       scale: endScale,
       duration: this.config.duration,
       ease: 'Power2',
-      onComplete: () => textObj.destroy()
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; textObj.destroy(); }
     });
   }
 
@@ -348,7 +349,7 @@ export class DamageNumbers {
       alpha: 0,
       duration: 800,
       ease: 'Power2',
-      onComplete: () => textObj.destroy()
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; textObj.destroy(); }
     });
   }
 }
@@ -370,6 +371,7 @@ export class HitEffect {
         yoyo: true,
         repeat: 1,
         onComplete: () => {
+          if (!this.scene?.scene?.isActive()) return;
           target.clearTint();
           target.setAlpha(1);
         }
@@ -408,7 +410,7 @@ export class HitEffect {
         scale: 0,
         duration: 200 + Math.random() * 100,
         ease: 'Power2',
-        onComplete: () => spark.destroy()
+        onComplete: () => { if (!this.scene?.scene?.isActive()) return; spark.destroy(); }
       });
     }
   }
@@ -428,7 +430,7 @@ export class HitEffect {
       alpha: 0,
       duration: 300,
       ease: 'Power2',
-      onComplete: () => shield.destroy()
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; shield.destroy(); }
     });
   }
 }

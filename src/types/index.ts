@@ -231,6 +231,7 @@ export enum UnitState {
   REPAIRING = 'repairing',
   PATROLLING = 'patrolling',
   GUARDING = 'guarding',
+  CAPTURING = 'capturing',
 }
 
 export enum UnitStance {
@@ -297,6 +298,7 @@ export interface UnitData {
   canCapture: boolean;
   canBuild?: boolean;
   special?: string;
+  description?: string;
   maxPassengers?: number;
 }
 
@@ -540,6 +542,8 @@ export interface Upgrade {
   factionGroup: FactionGroup;
   description: string;
   effect: string;
+  /** Upgrades that must be researched before this one becomes available */
+  prerequisites?: UpgradeType[];
 }
 
 export interface ResearchQueueItem {

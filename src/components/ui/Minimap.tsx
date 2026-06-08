@@ -22,27 +22,32 @@ interface MinimapConfig {
   showResources: boolean;
 }
 
+interface CombatIndicator {
+  x: number;
+  y: number;
+  time: number;
+  faction: string;
+}
+
 export const Minimap: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef<number>(0);
   const isDraggingRef = useRef(false);
-  const combatAlertsRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
-  const {
-    currentPlayer,
-    aiPlayers,
-    neutralBuildings,
-    map,
-    cameraPosition,
-    cameraViewport,
-    setCameraPosition,
-    fogVisibleTiles
-  } = useGameStore();
+  const combatAlertsRef = useRef<CombatIndicator[]>([]);
+  const currentPlayer = useGameStore(s => s.currentPlayer);
+  const aiPlayers = useGameStore(s => s.aiPlayers);
+  const neutralBuildings = useGameStore(s => s.neutralBuildings);
+  const map = useGameStore(s => s.map);
+  const cameraPosition = useGameStore(s => s.cameraPosition);
+  const cameraViewport = useGameStore(s => s.cameraViewport);
+  const setCameraPosition = useGameStore(s => s.setCameraPosition);
+  const fogVisibleTiles = useGameStore(s => s.fogVisibleTiles);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
-  const [pings, setPings] = useState<Array<{ x: number; y: number; time: number }>>([]);
+  const [pings, setPings] = useState<Array<{ x: number; y: number; id: number; time: number }>>([]);
   const [config, setConfig] = useState<MinimapConfig>({
     width: 180,
     height: 130,
@@ -100,6 +105,35 @@ export const Minimap: React.FC = () => {
     } else {
       ctx.fillStyle = '#4a6741';
       ctx.fillRect(0, 0, config.width, config.height);
+    }
+
+    // Draw fog of war overlay on minimap
+    if (map.tiles && fogVisibleTiles) {
+      const tileDrawSize = Math.max(1, Math.ceil(32 * scaleX));
+      for (let y = 0; y < map.height; y++) {
+        for (let x = 0; x < map.width; x++) {
+          const tileKey = `${x},${y}`;
+          if (!fogVisibleTiles.has(tileKey)) {
+            // Unexplored or explored-but-not-visible tile
+            const px = Math.floor(x * GAME_CONFIG.TILE_SIZE * scaleX);
+            const py = Math.floor(y * GAME_CONFIG.TILE_SIZE * scaleY);
+            // Check if any neighbor is visible for soft edge
+            const hasVisibleNeighbor =
+              fogVisibleTiles.has(`${x - 1},${y}`) ||
+              fogVisibleTiles.has(`${x + 1},${y}`) ||
+              fogVisibleTiles.has(`${x},${y - 1}`) ||
+              fogVisibleTiles.has(`${x},${y + 1}`);
+            if (hasVisibleNeighbor) {
+              // Edge of fog - lighter overlay (explored)
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+            } else {
+              // Deep fog - dark overlay (unexplored)
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            }
+            ctx.fillRect(px, py, tileDrawSize, tileDrawSize);
+          }
+        }
+      }
     }
 
     if (config.showResources && map.resourceNodes) {
@@ -191,24 +225,54 @@ export const Minimap: React.FC = () => {
       ctx.fillRect(hx, hy, GAME_CONFIG.TILE_SIZE * scaleX, GAME_CONFIG.TILE_SIZE * scaleY);
     }
 
-    // Draw combat alert flashes
+    // Draw combat alert indicators (flashing cross markers)
     const now = Date.now();
-    const alerts = combatAlertsRef.current.filter(a => now - a.time < 2000);
-    combatAlertsRef.current = alerts;
-    for (const alert of alerts) {
-      const age = now - alert.time;
+    const combatIndicators = combatAlertsRef.current.filter(a => now - a.time < 2000);
+    combatAlertsRef.current = combatIndicators;
+    for (const indicator of combatIndicators) {
+      const age = now - indicator.time;
       const alpha = Math.max(0, 1 - age / 2000);
-      const alertX = alert.x * scaleX;
-      const alertY = alert.y * scaleY;
-      const alertRadius = Math.max(3, 5 * scaleX * GAME_CONFIG.TILE_SIZE);
-      ctx.fillStyle = `rgba(255, 30, 30, ${alpha * 0.6})`;
+      // Flashing effect: blink by toggling visibility every 200ms
+      const blinkOn = Math.floor(age / 200) % 2 === 0;
+      const ix = indicator.x * scaleX;
+      const iy = indicator.y * scaleY;
+      const markerSize = Math.max(4, 7 * scaleX * GAME_CONFIG.TILE_SIZE);
+
+      // Determine color based on faction
+      const isPlayerUnit = indicator.faction === 'player';
+      const baseColor = isPlayerUnit ? [255, 60, 60] : [255, 200, 40]; // red for player attacks, yellow for enemy
+      const [cr, cg, cb] = baseColor;
+
+      // Draw outer glow circle
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 0.25})`;
       ctx.beginPath();
-      ctx.arc(alertX, alertY, alertRadius, 0, Math.PI * 2);
+      ctx.arc(ix, iy, markerSize * 1.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(255, 80, 80, ${alpha})`;
+
+      // Draw cross/X marker with flashing
+      if (blinkOn) {
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Draw X cross
+        ctx.moveTo(ix - markerSize, iy - markerSize);
+        ctx.lineTo(ix + markerSize, iy + markerSize);
+        ctx.moveTo(ix + markerSize, iy - markerSize);
+        ctx.lineTo(ix - markerSize, iy + markerSize);
+        ctx.stroke();
+
+        // Draw center dot
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+        ctx.beginPath();
+        ctx.arc(ix, iy, Math.max(1, markerSize * 0.3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw border ring (always visible, no blink)
+      ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 0.7})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(alertX, alertY, alertRadius + 1, 0, Math.PI * 2);
+      ctx.arc(ix, iy, markerSize + 1, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -277,13 +341,26 @@ export const Minimap: React.FC = () => {
 
   // Subscribe to combat events for minimap alerts
   useEffect(() => {
+    let lastAlertTime = 0;
     const unsub = gameEventBus.on('combat:hit', (event) => {
       const pos = event.data?.position as { x: number; y: number } | undefined;
       if (pos) {
-        combatAlertsRef.current.push({ x: pos.x, y: pos.y, time: Date.now() });
-        // Keep max 10 alerts
-        if (combatAlertsRef.current.length > 10) {
-          combatAlertsRef.current = combatAlertsRef.current.slice(-10);
+        const now = Date.now();
+        // Debounce: max 1 alert per 200ms
+        if (now - lastAlertTime < 200) return;
+        lastAlertTime = now;
+
+        // Determine faction: check if target belongs to current player
+        const targetId = event.data?.targetId as string | undefined;
+        const store = useGameStore.getState();
+        const isPlayerTarget = store.currentPlayer?.units?.some(u => u.id === targetId)
+          || store.currentPlayer?.buildings?.some(b => b.id === targetId);
+        const faction = isPlayerTarget ? 'player' : 'enemy';
+
+        combatAlertsRef.current.push({ x: pos.x, y: pos.y, time: now, faction });
+        // Keep max 15 indicators
+        if (combatAlertsRef.current.length > 15) {
+          combatAlertsRef.current = combatAlertsRef.current.slice(-15);
         }
       }
     });
@@ -318,14 +395,16 @@ export const Minimap: React.FC = () => {
     }
   }, [minimapToWorld]);
 
+  const pingIdRef = useRef(0);
   const addPing = useCallback((position: { x: number; y: number }) => {
-    const newPing = { x: position.x, y: position.y, time: Date.now() };
+    const pingId = ++pingIdRef.current;
+    const newPing = { x: position.x, y: position.y, id: pingId, time: Date.now() };
     setPings(prev => [...prev, newPing]);
     // Emit ping event for main game view
     gameEventBus.emit('map:ping', { position: { x: position.x, y: position.y } });
     // Remove ping after 3 seconds
     setTimeout(() => {
-      setPings(prev => prev.filter(p => p.time !== newPing.time));
+      setPings(prev => prev.filter(p => p.id !== pingId));
     }, 3000);
   }, []);
 

@@ -2,6 +2,7 @@ import type { AIContext } from './AITypes';
 import type { BehaviorNode, BehaviorNodeStatus } from './AITypes';
 import {
   AIAction,
+  AIActionType,
   createConditionCheck,
   prioritizeTargets,
   findDefensivePosition
@@ -14,10 +15,11 @@ import {
 } from './AIBehaviorTree';
 import { getDistance, getDifficultyConfig } from './AIUtils';
 import { AI_CONFIG } from '../config/AIConfig';
-import { UnitType, BuildingType, UnitState, Vector2, UpgradeType, FactionGroup, getFactionGroup } from '../../types';
-import { UNITS_BY_FACTION } from './AIUnitLookup';
-import { useGameStore } from '../../store/gameStore';
+import { UnitType, BuildingType, UnitState, Vector2, UpgradeType, FactionGroup, getFactionGroup, Faction, BuildingData, GameMapData } from '../../types';
+import { UNITS_BY_FACTION, BUILDINGS_BY_FACTION } from './AIUnitLookup';
+import { useGameStore, UNIT_UPGRADE_REQUIREMENTS } from '../../store/gameStore';
 import { getUpgradesByFactionGroup } from '../data/upgrades';
+import { GAME_CONFIG } from '../config/GameConfig';
 
 export interface AIBrainConfig {
   difficulty: 'easy' | 'normal' | 'hard' | 'brutal';
@@ -32,7 +34,13 @@ export class AIBrain {
   private config: AIBrainConfig;
   private pendingActions: AIAction[] = [];
   private actionCooldowns: Map<string, number> = new Map();
+  private lastScoutTime: number = 0;
   private lastUpdate: number = 0;
+
+  /** Get game time in milliseconds (consistent with gameTime, pauses with game) */
+  private getGameTimeMs(): number {
+    return useGameStore.getState().gameTime * 1000;
+  }
 
   constructor(config: Partial<AIBrainConfig> = {}) {
     this.config = {
@@ -94,6 +102,14 @@ export class AIBrain {
     );
 
     root.addChild(
+      new SequenceNode('scout', 'Scouting', [
+        createConditionCheck('should_scout', 'Should Scout',
+          (ctx) => this.shouldScout(ctx)),
+        this.createScoutSequence()
+      ])
+    );
+
+    root.addChild(
       new SequenceNode('superweapon', 'Superweapon Management', [
         createConditionCheck('can_build_superweapon', 'Can Build Superweapon',
           (ctx) => this.canBuildSuperweapon(ctx)),
@@ -132,11 +148,30 @@ export class AIBrain {
     sequence.addChild(
       new ActionNode('find_safe_position', 'Find Safe Position', (ctx: AIContext): BehaviorNodeStatus => {
         const damagedUnits = ctx.aiPlayer.units.filter(u => u.health < u.maxHealth * 0.3);
-        
+
         for (const unit of damagedUnits) {
-          const safeLocation = ctx.gameMap.friendlyBaseLocation || 
-            ctx.aiPlayer.buildings.find(b => b.type === BuildingType.COMMAND)?.position ||
-            { x: ctx.gameMap.width / 2, y: ctx.gameMap.height / 2 };
+          // Find the nearest enemy to retreat away from
+          const nearestEnemy = ctx.enemyPlayer.units
+            .filter(e => getDistance(e.position, unit.position) < 300)
+            .sort((a, b) => getDistance(a.position, unit.position) - getDistance(b.position, unit.position))[0];
+
+          let safeLocation: Vector2;
+          if (nearestEnemy) {
+            // Retreat in the opposite direction from the nearest enemy
+            const dx = unit.position.x - nearestEnemy.position.x;
+            const dy = unit.position.y - nearestEnemy.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const retreatDist = 200;
+            safeLocation = {
+              x: Math.max(0, Math.min(ctx.gameMap.width * 64, unit.position.x + (dx / dist) * retreatDist)),
+              y: Math.max(0, Math.min(ctx.gameMap.height * 64, unit.position.y + (dy / dist) * retreatDist)),
+            };
+          } else {
+            // No nearby enemy, retreat to base
+            safeLocation = ctx.gameMap.friendlyBaseLocation ||
+              ctx.aiPlayer.buildings.find(b => b.type === BuildingType.COMMAND)?.position ||
+              { x: ctx.gameMap.width / 2, y: ctx.gameMap.height / 2 };
+          }
 
           this.pendingActions.push({
             type: 'retreat',
@@ -159,14 +194,16 @@ export class AIBrain {
     sequence.addChild(
       new ActionNode('scatter_units', 'Scatter Units', (ctx: AIContext): BehaviorNodeStatus => {
         const _threatCenter = this.calculateThreatCenter(ctx);
+        const mapW = ctx.gameMap.width * GAME_CONFIG.TILE_SIZE;
+        const mapH = ctx.gameMap.height * GAME_CONFIG.TILE_SIZE;
 
         for (const unit of ctx.aiPlayer.units) {
           if (unit.data?.canAttack) {
             const scatterDir = Math.random() * Math.PI * 2;
             const scatterDist = AI_CONFIG.SCATTER_DISTANCE_MIN + Math.random() * AI_CONFIG.SCATTER_DISTANCE_RANGE;
             const newPos = {
-              x: unit.position.x + Math.cos(scatterDir) * scatterDist,
-              y: unit.position.y + Math.sin(scatterDir) * scatterDist
+              x: Math.max(0, Math.min(mapW - GAME_CONFIG.TILE_SIZE, unit.position.x + Math.cos(scatterDir) * scatterDist)),
+              y: Math.max(0, Math.min(mapH - GAME_CONFIG.TILE_SIZE, unit.position.y + Math.sin(scatterDir) * scatterDist))
             };
 
             this.pendingActions.push({
@@ -177,6 +214,103 @@ export class AIBrain {
             });
           }
         }
+
+        return 'success';
+      })
+    );
+
+    return sequence;
+  }
+
+  private shouldScout(ctx: AIContext): boolean {
+    // Don't scout if under threat
+    if (ctx.threatLevel === 'critical' || ctx.threatLevel === 'high') return false;
+
+    // Need at least some military units before scouting
+    const combatUnits = ctx.aiPlayer.units.filter(u => u.data?.canAttack && !u.transportId);
+    if (combatUnits.length < 3) return false;
+
+    // Cooldown: don't scout too frequently
+    const cooldownKey = 'scout';
+    if (this.actionCooldowns.has(cooldownKey)) return false;
+
+    // Deterministic scouting: every 45-90 seconds based on aggression
+    const scoutInterval = (90 - this.config.aggressionLevel * 45) * 1000;
+    const lastScoutTime = this.lastScoutTime || 0;
+    if (this.getGameTimeMs() - lastScoutTime < scoutInterval) return false;
+
+    return true;
+  }
+
+  private createScoutSequence(): BehaviorNode {
+    const sequence = new SequenceNode('scout_seq', 'Scout Sequence');
+
+    sequence.addChild(
+      new ActionNode('scout_action', 'Send Scout', (ctx: AIContext): BehaviorNodeStatus => {
+        // Find fast idle units for scouting (prefer airborne or fast units)
+        const candidates = ctx.aiPlayer.units.filter(u =>
+          u.data?.canAttack && !u.transportId &&
+          (u.state === 'idle' || u.state === 'defending') &&
+          u.health > u.maxHealth * 0.8
+        );
+
+        if (candidates.length === 0) return 'failure';
+
+        // Prefer fast/airborne units for scouting
+        const scout = candidates.sort((a, b) => {
+          const aScore = (a.isAirborne ? 100 : 0) + (a.speed || 0) * 10;
+          const bScore = (b.isAirborne ? 100 : 0) + (b.speed || 0) * 10;
+          return bScore - aScore;
+        })[0];
+
+        // Pick a scouting destination: unexplored areas or enemy base direction
+        const basePos = ctx.gameMap.friendlyBaseLocation || scout.position;
+        const mapW = ctx.gameMap.width * GAME_CONFIG.TILE_SIZE;
+        const mapH = ctx.gameMap.height * GAME_CONFIG.TILE_SIZE;
+
+        // Generate candidate scout positions in different directions
+        const scoutPositions: Vector2[] = [];
+        const angles = [0, Math.PI / 4, Math.PI / 2, 3 * Math.PI / 4, Math.PI, 5 * Math.PI / 4, 3 * Math.PI / 2, 7 * Math.PI / 4];
+        for (const angle of angles) {
+          const dist = 300 + Math.random() * 400;
+          const pos = {
+            x: Math.max(GAME_CONFIG.TILE_SIZE, Math.min(mapW - GAME_CONFIG.TILE_SIZE,
+              basePos.x + Math.cos(angle) * dist)),
+            y: Math.max(GAME_CONFIG.TILE_SIZE, Math.min(mapH - GAME_CONFIG.TILE_SIZE,
+              basePos.y + Math.sin(angle) * dist)),
+          };
+          scoutPositions.push(pos);
+        }
+
+        // If we know enemy base location, strongly prefer scouting toward it
+        let targetPos: Vector2;
+        if (ctx.gameMap.enemyBaseLocation) {
+          // Scout toward enemy base with some offset for variety
+          const dx = ctx.gameMap.enemyBaseLocation.x - basePos.x;
+          const dy = ctx.gameMap.enemyBaseLocation.y - basePos.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const offset = (Math.random() - 0.5) * 200;
+          targetPos = {
+            x: Math.max(GAME_CONFIG.TILE_SIZE, Math.min(mapW - GAME_CONFIG.TILE_SIZE,
+              basePos.x + (dx / dist) * (dist * 0.6) + offset)),
+            y: Math.max(GAME_CONFIG.TILE_SIZE, Math.min(mapH - GAME_CONFIG.TILE_SIZE,
+              basePos.y + (dy / dist) * (dist * 0.6) + offset)),
+          };
+        } else {
+          // No known enemy base: pick a random scout position
+          targetPos = scoutPositions[Math.floor(Math.random() * scoutPositions.length)];
+        }
+
+        this.pendingActions.push({
+          type: 'patrol',
+          unitId: scout.id,
+          position: targetPos,
+          priority: 3
+        });
+
+        // Set cooldown: 15-30 seconds between scouts
+        this.actionCooldowns.set('scout', this.getGameTimeMs() + 15000 + Math.random() * 15000);
+        this.lastScoutTime = this.getGameTimeMs();
 
         return 'success';
       })
@@ -263,11 +397,14 @@ export class AIBrain {
         );
 
         for (const threatened of threatenedUnits) {
-          const closestDefender = defenders.find(d => 
-            getDistance(d.position, threatened.position) < 
-            getDistance(d.position, ctx.enemyPlayer.units.find(e => 
-              getDistance(e.position, threatened.position) < 200
-            )!.position)
+          const nearestEnemy = ctx.enemyPlayer.units.find(e =>
+            getDistance(e.position, threatened.position) < 200
+          );
+          if (!nearestEnemy) continue;
+
+          const closestDefender = defenders.find(d =>
+            getDistance(d.position, threatened.position) <
+            getDistance(d.position, nearestEnemy.position)
           );
 
           if (closestDefender) {
@@ -399,35 +536,18 @@ export class AIBrain {
 
         if (!targetStructure) return 'failure';
 
-        // Find placement location near command center
-        const command = buildings.find(b => b.type === BuildingType.COMMAND);
-        if (!command) return 'failure';
+        // Find best placement position using smart positioning
+        const position = this.findBestBuildingPosition(targetStructure as BuildingType, ctx);
+        if (!position) return 'failure';
 
-        const baseX = Math.floor(command.position.x / 32); // TILE_SIZE
-        const baseY = Math.floor(command.position.y / 32);
+        this.pendingActions.push({
+          type: 'build',
+          buildingId: targetStructure,
+          position,
+          priority: 4
+        });
 
-        // Try positions in a spiral pattern
-        const offsets = [
-          { x: 6, y: 0 }, { x: 8, y: 2 }, { x: 5, y: 5 },
-          { x: 3, y: 6 }, { x: 0, y: 6 }, { x: -3, y: 5 },
-          { x: -5, y: 3 }, { x: -6, y: 0 }, { x: -5, y: -4 },
-          { x: -2, y: -5 }, { x: 2, y: -5 }, { x: 5, y: -4 },
-        ];
-
-        for (const offset of offsets) {
-          const bx = baseX + offset.x;
-          const by = baseY + offset.y;
-
-          this.pendingActions.push({
-            type: 'build',
-            buildingId: targetStructure,
-            position: { x: bx * 32, y: by * 32 },
-            priority: 4
-          });
-          return 'success';
-        }
-
-        return 'failure';
+        return 'success';
       })
     );
 
@@ -443,24 +563,26 @@ export class AIBrain {
         if (!unitType) return 'failure';
 
         // Find the appropriate production building for this unit type
-        const productionBuildings = ctx.aiPlayer.buildings.filter(b =>
-          b.isConstructed && (b.type.includes('barracks') || b.type.includes('warfactory') || b.type.includes('helipad') || b.type.includes('naval_shipyard'))
-        );
+        const factionBuildings = BUILDINGS_BY_FACTION[ctx.aiPlayer.faction as Faction] || {};
+        const productionBuildings = ctx.aiPlayer.buildings.filter(b => {
+          if (!b.isConstructed || !b.isPowered) return false;
+          const buildingData = factionBuildings[b.type as BuildingType] as BuildingData | undefined;
+          const canProduce = (buildingData?.canProduce || b.canProduce || []) as readonly UnitType[];
+          return canProduce.includes(unitType as UnitType) && b.productionQueue.length < 3;
+        });
 
         for (const building of productionBuildings) {
-          if (building.productionQueue.length < 3) {
-            this.pendingActions.push({
-              type: 'produce',
-              buildingId: building.id,
-              unitType: unitType as UnitType,
-              position: { x: 0, y: 0 },
-              priority: 3
-            });
-            return 'success';
-          }
+          this.pendingActions.push({
+            type: 'produce',
+            buildingId: building.id,
+            unitType: unitType as UnitType,
+            position: { x: 0, y: 0 },
+            priority: 3
+          });
+          return 'success';
         }
 
-        return productionBuildings.length > 0 ? 'failure' : 'failure';
+        return 'failure';
       })
     );
 
@@ -472,25 +594,31 @@ export class AIBrain {
 
     sequence.addChild(
       new ActionNode('produce_harvesters_action', 'Produce Harvesters', (ctx: AIContext): BehaviorNodeStatus => {
-        const refinery = ctx.aiPlayer.buildings.find(b => 
-          b.isConstructed && b.type === BuildingType.REFINERY
-        );
-
-        if (!refinery) return 'failure';
-
-        const currentHarvesters = ctx.aiPlayer.units.filter(u => 
+        const currentHarvesters = ctx.aiPlayer.units.filter(u =>
           u.type === 'miner'
         ).length;
 
         const neededHarvesters = Math.max(0, AI_CONFIG.DESIRED_MINER_COUNT - currentHarvesters);
 
         if (neededHarvesters > 0) {
-          this.pendingActions.push({
-            type: 'produce',
-            buildingId: refinery.id,
-            position: { x: 0, y: 0 },
-            priority: 5
+          // Find a building that can produce miners (war factory)
+          const factionBuildings = BUILDINGS_BY_FACTION[ctx.aiPlayer.faction as Faction] || {};
+          const producerBuilding = ctx.aiPlayer.buildings.find(b => {
+            if (!b.isConstructed || !b.isPowered) return false;
+            const buildingData = factionBuildings[b.type as BuildingType] as BuildingData | undefined;
+            const canProduce = (buildingData?.canProduce || b.canProduce || []) as readonly UnitType[];
+            return canProduce.includes(UnitType.MINER) && b.productionQueue.length < 3;
           });
+
+          if (producerBuilding) {
+            this.pendingActions.push({
+              type: 'produce',
+              buildingId: producerBuilding.id,
+              unitType: UnitType.MINER,
+              position: { x: 0, y: 0 },
+              priority: 5
+            });
+          }
         }
 
         return neededHarvesters > 0 ? 'success' : 'failure';
@@ -520,17 +648,21 @@ export class AIBrain {
     sequence.addChild(
       new ActionNode('attack_action', 'Attack', (ctx: AIContext): BehaviorNodeStatus => {
         const targets = prioritizeTargets(ctx);
-        const attackers = ctx.aiPlayer.units.filter(u => 
+        const attackers = ctx.aiPlayer.units.filter(u =>
           u.data?.canAttack && u.state !== 'retreating' && u.health > u.maxHealth * 0.5
         );
 
         if (targets.length === 0 || attackers.length === 0) return 'failure';
 
         const attackSize = Math.ceil(attackers.length * this.config.aggressionLevel);
+        const activeAttackers = attackers.slice(0, attackSize);
 
-        for (let i = 0; i < Math.min(attackSize, targets.length); i++) {
-          const attacker = attackers[i];
-          const target = targets[i];
+        // Distribute attackers across targets, concentrating fire on high-priority targets
+        for (let i = 0; i < activeAttackers.length; i++) {
+          const attacker = activeAttackers[i];
+          // Assign to highest priority target first, then cycle through remaining targets
+          const targetIndex = i < targets.length ? i : 0;
+          const target = targets[targetIndex];
 
           this.pendingActions.push({
             type: 'attack',
@@ -744,22 +876,41 @@ export class AIBrain {
     sequence.addChild(
       new ActionNode('harvest_action', 'Harvest', (ctx: AIContext): BehaviorNodeStatus => {
         const harvesters = ctx.aiPlayer.units.filter(u => u.data?.canHarvest);
+        const assignedResourceIds = new Set<string>();
+
+        // Track which resources are already targeted by active harvesters
+        for (const h of harvesters) {
+          if (h.state !== 'idle' && h.target) {
+            assignedResourceIds.add(h.target);
+          }
+        }
 
         for (const harvester of harvesters) {
           if (harvester.state === 'idle') {
-            const nearestResource = ctx.gameMap.resourceNodes.find(r => 
-              r.amount > 0 && !r.assignedHarvester
+            // Find nearest unassigned resource by distance
+            const availableResources = ctx.gameMap.resourceNodes.filter(r =>
+              r.amount > 0 && !assignedResourceIds.has(r.id)
             );
 
-            if (nearestResource) {
-              this.pendingActions.push({
-                type: 'harvest',
-                unitId: harvester.id,
-                targetId: nearestResource.id,
-                position: nearestResource.position,
-                priority: 4
-              });
-            }
+            if (availableResources.length === 0) continue;
+
+            // Sort by distance to harvester
+            availableResources.sort((a, b) => {
+              const distA = getDistance(harvester.position, a.position);
+              const distB = getDistance(harvester.position, b.position);
+              return distA - distB;
+            });
+
+            const nearestResource = availableResources[0];
+            assignedResourceIds.add(nearestResource.id);
+
+            this.pendingActions.push({
+              type: 'harvest',
+              unitId: harvester.id,
+              targetId: nearestResource.id,
+              position: nearestResource.position,
+              priority: 4
+            });
           }
         }
 
@@ -800,21 +951,47 @@ export class AIBrain {
 
     sequence.addChild(
       new ActionNode('repair_action', 'Repair', (ctx: AIContext): BehaviorNodeStatus => {
-        const damagedBuildings = ctx.aiPlayer.buildings.filter(b => 
+        const damagedBuildings = ctx.aiPlayer.buildings.filter(b =>
           b.isConstructed && b.health < b.maxHealth * 0.7
         );
 
-        for (const building of damagedBuildings) {
-          if (ctx.resources.money >= AI_CONFIG.REPAIR_COST_THRESHOLD) {
-            this.pendingActions.push({
-              type: 'repair',
-              buildingId: building.id,
-              priority: 2
-            });
-          }
+        if (damagedBuildings.length === 0) return 'failure';
+
+        // Sort by priority: command center first, then production, then defense, then others
+        const BUILDING_REPAIR_PRIORITY: Record<string, number> = {
+          [BuildingType.COMMAND]: 10,
+          [BuildingType.BARRACKS]: 8,
+          [BuildingType.WARFACTORY]: 8,
+          [BuildingType.REFINERY]: 7,
+          [BuildingType.POWER]: 6,
+          [BuildingType.TECH]: 6,
+          [BuildingType.DEFENSE]: 5,
+          [BuildingType.TURRET]: 5,
+          [BuildingType.TESLA_COIL]: 5,
+          [BuildingType.FLAME_TOWER]: 5,
+          [BuildingType.RADAR]: 4,
+          [BuildingType.REPAIR]: 3,
+        };
+
+        // Sort: highest priority first, then lowest health percentage first
+        damagedBuildings.sort((a, b) => {
+          const priA = BUILDING_REPAIR_PRIORITY[a.type] || 1;
+          const priB = BUILDING_REPAIR_PRIORITY[b.type] || 1;
+          if (priA !== priB) return priB - priA;
+          return (a.health / a.maxHealth) - (b.health / b.maxHealth);
+        });
+
+        // Repair the highest priority building (limit to 1 per tick to avoid spending too much)
+        const topBuilding = damagedBuildings[0];
+        if (ctx.resources.money >= AI_CONFIG.REPAIR_COST_THRESHOLD) {
+          this.pendingActions.push({
+            type: 'repair',
+            buildingId: topBuilding.id,
+            priority: 5
+          });
         }
 
-        return damagedBuildings.length > 0 ? 'success' : 'failure';
+        return 'success';
       })
     );
 
@@ -922,7 +1099,7 @@ export class AIBrain {
         this.pendingActions.push({
           type: 'produce',
           buildingId: barracks.id,
-          position: target.position,
+          unitType: UnitType.ENGINEER,
           priority: 5
         });
         return 'success';
@@ -933,11 +1110,11 @@ export class AIBrain {
   }
 
   public update(context: AIContext): AIAction[] {
-    if (Date.now() - this.lastUpdate < this.config.reactionTime) {
+    if (this.getGameTimeMs() - this.lastUpdate < this.config.reactionTime) {
       return this.pendingActions;
     }
 
-    this.lastUpdate = Date.now();
+    this.lastUpdate = this.getGameTimeMs();
     context.threatLevel = calculateThreatLevel(context);
 
     this.rootBehavior.execute(context);
@@ -949,6 +1126,18 @@ export class AIBrain {
     // Activate ready superweapons
     const superweaponActions = this.manageSuperweapons(context);
     this.pendingActions.push(...superweaponActions);
+
+    // Respond to enemy superweapon threats
+    const threatActions = this.respondToSuperweaponThreat(context);
+    this.pendingActions.push(...threatActions);
+
+    // Use Chrono Legionnaire chrono shift ability
+    const chronoActions = this.manageChronoAbilities(context);
+    this.pendingActions.push(...chronoActions);
+
+    // Sell low-value buildings when low on funds
+    const sellActions = this.manageSellBuildings(context);
+    this.pendingActions.push(...sellActions);
 
     this.cleanupCooldowns();
 
@@ -1011,9 +1200,13 @@ export class AIBrain {
   }
 
   private canProduceUnits(ctx: AIContext): boolean {
-    return ctx.aiPlayer.buildings.some(b =>
-      b.isConstructed && (b.type.includes('barracks') || b.type.includes('warfactory') || b.type.includes('naval_shipyard'))
-    );
+    const factionBuildings = BUILDINGS_BY_FACTION[ctx.aiPlayer.faction as Faction] || {};
+    return ctx.aiPlayer.buildings.some(b => {
+      if (!b.isConstructed || !b.isPowered) return false;
+      const buildingData = factionBuildings[b.type as BuildingType] as BuildingData | undefined;
+      const canProduce = (buildingData?.canProduce || b.canProduce || []) as readonly UnitType[];
+      return canProduce.length > 0;
+    });
   }
 
   private needHarvesters(ctx: AIContext): boolean {
@@ -1050,79 +1243,37 @@ export class AIBrain {
 
     const aiPlayer = ctx.aiPlayer;
     const faction = aiPlayer.faction;
-    const factionGroup = getFactionGroup(faction as import('../../types').Faction);
 
-    // Get available unit types based on buildings
-    const hasBarracks = aiPlayer.buildings.some(b => b.type === BuildingType.BARRACKS && b.isConstructed);
-    const hasWarFactory = aiPlayer.buildings.some(b => b.type === BuildingType.WARFACTORY && b.isConstructed);
-    const hasHelipad = aiPlayer.buildings.some(b => b.type === BuildingType.HELIPAD && b.isConstructed);
-    const hasTech = aiPlayer.buildings.some(b => b.type === BuildingType.TECH && b.isConstructed);
-    const hasNavalShipyard = aiPlayer.buildings.some(b => b.type === BuildingType.NAVAL_SHIPYARD && b.isConstructed);
-
-    // Check researched upgrades from the store
+    // Get available unit types from building canProduce data
     const store = useGameStore.getState();
     const storeAiPlayer = store.aiPlayers.find(p => p.faction === faction);
     const researchedUpgrades = new Set(storeAiPlayer?.researchedUpgrades || []);
 
+    const factionBuildings = BUILDINGS_BY_FACTION[faction as Faction] || {};
     const availableUnits: UnitType[] = [];
 
-    // Infantry from barracks
-    if (hasBarracks) {
-      availableUnits.push(UnitType.SOLDIER);
-      availableUnits.push(UnitType.ROCKET);
-      // Add engineer occasionally
-      if (Math.random() < 0.1) availableUnits.push(UnitType.ENGINEER);
-    }
+    // Collect all producible units from constructed buildings
+    for (const building of aiPlayer.buildings) {
+      if (!building.isConstructed || !building.isPowered) continue;
 
-    // Vehicles from war factory
-    if (hasWarFactory) {
-      availableUnits.push(UnitType.TANK);
-      availableUnits.push(UnitType.MINER);
+      // Get canProduce from building data (faction-specific)
+      const buildingData = factionBuildings[building.type as BuildingType] as BuildingData | undefined;
+      const canProduce = (buildingData?.canProduce || building.canProduce || []) as readonly UnitType[];
 
-      // Advanced units require tech center + upgrade research
-      if (hasTech) {
-        if (factionGroup === FactionGroup.ALLIED) {
-          if (researchedUpgrades.has(UpgradeType.PRISM_TECH)) {
-            availableUnits.push(UnitType.PRISM);
-          }
-          if (researchedUpgrades.has(UpgradeType.CHRONO_TECH)) {
-            availableUnits.push(UnitType.CHRONO);
-          }
-          availableUnits.push(UnitType.PHANTOM);
-        } else {
-          availableUnits.push(UnitType.APOCALYPSE);
-          if (researchedUpgrades.has(UpgradeType.TESLA_WEAPONS)) {
-            availableUnits.push(UnitType.TESLA);
-          }
-          availableUnits.push(UnitType.APC);
+      for (const unitType of canProduce) {
+        if (!availableUnits.includes(unitType)) {
+          // Check tech unlock requirements
+          const requiredUpgrade = this.getRequiredUpgradeForUnit(unitType);
+          if (requiredUpgrade && !researchedUpgrades.has(requiredUpgrade)) continue;
+          availableUnits.push(unitType);
         }
-      }
-    }
-
-    // Air units from helipad
-    if (hasHelipad) {
-      availableUnits.push(UnitType.HELICOPTER);
-    }
-
-    // Naval units from naval shipyard
-    if (hasNavalShipyard) {
-      if (factionGroup === FactionGroup.ALLIED) {
-        availableUnits.push(UnitType.DESTROYER);
-        availableUnits.push(UnitType.TRANSPORT_SHIP);
-      } else {
-        availableUnits.push(UnitType.SUBMARINE);
-        availableUnits.push(UnitType.TRANSPORT_SHIP);
       }
     }
 
     if (availableUnits.length === 0) return null;
 
     // Strategic weighting based on game state
-    const enemyAirUnits = ctx.enemyPlayer.units.filter(u => {
-      // Check if unit is airborne by type
-      const airTypes: string[] = ['helicopter', 'blackhawk', 'kirov', 'yak'];
-      return airTypes.includes(u.type);
-    });
+    const enemyAirUnits = ctx.enemyPlayer.units.filter(u => u.isAirborne);
     const needsAntiAir = enemyAirUnits.length > 0;
     const minerCount = aiPlayer.units.filter(u => u.type === UnitType.MINER).length;
     const needsMiners = minerCount < 3;
@@ -1135,15 +1286,27 @@ export class AIBrain {
       let weight = 1;
       if (unitType === UnitType.MINER) weight = needsMiners ? 5 : 0.5;
       if (unitType === UnitType.ROCKET && needsAntiAir) weight = 3;
+      if (unitType === UnitType.FLAKINFANTRY && needsAntiAir) weight = 4;
+      if (unitType === UnitType.FLAK && needsAntiAir) weight = 4;
       if (unitType === UnitType.ENGINEER) weight = needsEngineers ? 2 : 0.3;
       if (unitType === UnitType.PRISM || unitType === UnitType.APOCALYPSE) weight = 2;
       if (unitType === UnitType.TESLA || unitType === UnitType.PHANTOM) weight = 1.5;
       if (unitType === UnitType.CHRONO) weight = 1.5;
+      if (unitType === UnitType.GUARDIAN) weight = 1.5;
+      if (unitType === UnitType.DESPOT) weight = 1.5;
       if (unitType === UnitType.APC) weight = 1;
       if (unitType === UnitType.HELICOPTER) weight = needsAntiAir ? 1.5 : 1;
+      if (unitType === UnitType.BLACKHAWK) weight = 1.5;
+      if (unitType === UnitType.KIROV) weight = 1.2;
+      if (unitType === UnitType.YAK) weight = 1.5;
       if (unitType === UnitType.DESTROYER) weight = 1.5;
       if (unitType === UnitType.SUBMARINE) weight = 1.5;
       if (unitType === UnitType.TRANSPORT_SHIP) weight = 0.8;
+      if (unitType === UnitType.SOLDIER || unitType === UnitType.CONSCRIPT) weight = 1;
+      if (unitType === UnitType.SNIPER) weight = 1.2;
+      if (unitType === UnitType.TANYA || unitType === UnitType.SEAL) weight = 0.8;
+      if (unitType === UnitType.TERRORIST) weight = 1;
+      if (unitType === UnitType.IVAN) weight = 0.8;
       weighted.push({ type: unitType, weight });
     }
 
@@ -1157,35 +1320,362 @@ export class AIBrain {
     return weighted[weighted.length - 1].type;
   }
 
-  private determineBuildPriority(ctx: AIContext): { type: string; position: { x: number; y: number }; cost: number }[] {
-    const base = ctx.gameMap.friendlyBaseLocation ||
-      ctx.aiPlayer.buildings.find(b => b.type === BuildingType.COMMAND)?.position ||
-      { x: ctx.gameMap.width / 2, y: ctx.gameMap.height / 2 };
+  private getRequiredUpgradeForUnit(unitType: UnitType): UpgradeType | null {
+    return UNIT_UPGRADE_REQUIREMENTS[unitType] || null;
+  }
 
-    const plan: { type: string; position: { x: number; y: number }; cost: number }[] = [];
+  private determineBuildPriority(ctx: AIContext): { type: BuildingType; position: { x: number; y: number }; cost: number }[] {
+    const plan: { type: BuildingType; position: { x: number; y: number }; cost: number }[] = [];
+    const buildings = ctx.aiPlayer.buildings;
+    const money = ctx.resources.money;
 
+    const hasBarracks = buildings.some(b => b.type === BuildingType.BARRACKS && b.isConstructed);
+    const hasRefinery = buildings.some(b => b.type === BuildingType.REFINERY && b.isConstructed);
+    const hasWarFactory = buildings.some(b => b.type === BuildingType.WARFACTORY && b.isConstructed);
+    const hasRadar = buildings.some(b => b.type === BuildingType.RADAR && b.isConstructed);
+    const hasTech = buildings.some(b => b.type === BuildingType.TECH && b.isConstructed);
+    const hasRepair = buildings.some(b => b.type === BuildingType.REPAIR && b.isConstructed);
+    const hasHelipad = buildings.some(b => b.type === BuildingType.HELIPAD && b.isConstructed);
+    const hasNavalShipyard = buildings.some(b => b.type === BuildingType.NAVAL_SHIPYARD && b.isConstructed);
+    const refineryCount = buildings.filter(b => b.type === BuildingType.REFINERY && b.isConstructed).length;
+    const powerCount = buildings.filter(b => b.type === BuildingType.POWER).length;
+    const defenseCount = buildings.filter(b =>
+      [BuildingType.TURRET, BuildingType.TESLA_COIL, BuildingType.FLAME_TOWER, BuildingType.DEFENSE, BuildingType.WALL].includes(b.type as BuildingType) && b.isConstructed
+    ).length;
+
+    // 1. Power when negative balance
     if (ctx.aiPlayer.powerBalance < 0) {
-      plan.push({
-        type: BuildingType.POWER,
-        position: { x: base.x + 100, y: base.y + 100 },
-        cost: 500
-      });
+      const pos = this.findBestBuildingPosition(BuildingType.POWER, ctx);
+      if (pos) plan.push({ type: BuildingType.POWER, position: pos, cost: 600 });
     }
 
-    const hasBarracks = ctx.aiPlayer.buildings.some(b => b.type === BuildingType.BARRACKS && b.isConstructed);
+    // 2. First barracks
     if (!hasBarracks) {
-      plan.push({
-        type: BuildingType.BARRACKS,
-        position: { x: base.x - 100, y: base.y + 100 },
-        cost: 800
-      });
+      const pos = this.findBestBuildingPosition(BuildingType.BARRACKS, ctx);
+      if (pos) plan.push({ type: BuildingType.BARRACKS, position: pos, cost: 500 });
+    }
+
+    // 3. First refinery (economy is critical)
+    if (!hasRefinery && money >= 2000) {
+      const pos = this.findBestBuildingPosition(BuildingType.REFINERY, ctx);
+      if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
+    }
+
+    // 4. Second refinery for better economy
+    if (hasRefinery && refineryCount < 2 && money >= 2000) {
+      const pos = this.findBestBuildingPosition(BuildingType.REFINERY, ctx);
+      if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
+    }
+
+    // 5. War factory
+    if (!hasWarFactory && hasRefinery && money >= 3000) {
+      const pos = this.findBestBuildingPosition(BuildingType.WARFACTORY, ctx);
+      if (pos) plan.push({ type: BuildingType.WARFACTORY, position: pos, cost: 3000 });
+    }
+
+    // 6. Radar
+    if (!hasRadar && hasWarFactory && money >= 1500) {
+      const pos = this.findBestBuildingPosition(BuildingType.RADAR, ctx);
+      if (pos) plan.push({ type: BuildingType.RADAR, position: pos, cost: 1500 });
+    }
+
+    // 7. Helipad (if faction has one)
+    if (!hasHelipad && hasWarFactory && money >= 1000) {
+      const pos = this.findBestBuildingPosition(BuildingType.HELIPAD, ctx);
+      if (pos) plan.push({ type: BuildingType.HELIPAD, position: pos, cost: 1000 });
+    }
+
+    // 8. Tech center
+    if (!hasTech && hasRadar && money >= 2500) {
+      const pos = this.findBestBuildingPosition(BuildingType.TECH, ctx);
+      if (pos) plan.push({ type: BuildingType.TECH, position: pos, cost: 2500 });
+    }
+
+    // 9. Repair facility
+    if (!hasRepair && hasWarFactory && money >= 1500) {
+      const pos = this.findBestBuildingPosition(BuildingType.REPAIR, ctx);
+      if (pos) plan.push({ type: BuildingType.REPAIR, position: pos, cost: 1500 });
+    }
+
+    // 10. Naval shipyard (late game)
+    if (!hasNavalShipyard && hasRadar && money >= 2000) {
+      const pos = this.findBestBuildingPosition(BuildingType.NAVAL_SHIPYARD, ctx);
+      if (pos) plan.push({ type: BuildingType.NAVAL_SHIPYARD, position: pos, cost: 1500 });
+    }
+
+    // 11. Defense buildings (when base is established)
+    if (defenseCount < 3 && hasBarracks && money >= 600) {
+      const defenseType = this.selectDefenseBuilding(ctx);
+      if (defenseType) {
+        const pos = this.findBestBuildingPosition(defenseType, ctx);
+        if (pos) plan.push({ type: defenseType, position: pos, cost: 800 });
+      }
+    }
+
+    // 12. Extra power for late game
+    if (powerCount < 5 && money >= 800) {
+      const pos = this.findBestBuildingPosition(BuildingType.POWER, ctx);
+      if (pos) plan.push({ type: BuildingType.POWER, position: pos, cost: 800 });
+    }
+
+    // 13. Third refinery for late game economy
+    if (refineryCount >= 2 && refineryCount < 3 && hasWarFactory && money >= 2000) {
+      const pos = this.findBestBuildingPosition(BuildingType.REFINERY, ctx);
+      if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
     }
 
     return plan;
   }
 
+  private selectDefenseBuilding(ctx: AIContext): BuildingType | null {
+    const factionGroup = getFactionGroup(ctx.aiPlayer.faction as import('../../types').Faction);
+    // Soviet factions: flame tower and tesla coil
+    if (factionGroup === FactionGroup.SOVIET) {
+      return Math.random() < 0.5 ? BuildingType.FLAME_TOWER : BuildingType.TESLA_COIL;
+    }
+    // Allied factions: turret and defense (patriot missile)
+    return Math.random() < 0.6 ? BuildingType.TURRET : BuildingType.DEFENSE;
+  }
+
+  /**
+   * Find the best position to place a building, avoiding overlaps and blocking paths.
+   * Scores candidate positions based on adjacency, distance to key buildings, and path blocking.
+   */
+  private findBestBuildingPosition(
+    buildingType: BuildingType,
+    ctx: AIContext
+  ): Vector2 | null {
+    const store = useGameStore.getState();
+    const aiPlayer = store.aiPlayers.find(p => p.faction === ctx.aiPlayer.faction);
+    if (!aiPlayer) return null;
+
+    const map = store.map;
+    if (!map) return null;
+
+    // Get building dimensions from faction data
+    const buildingData = BUILDINGS_BY_FACTION[aiPlayer.faction as Faction]?.[buildingType] as BuildingData | undefined;
+    const buildingWidth = buildingData?.width ?? 2;
+    const buildingHeight = buildingData?.height ?? 2;
+
+    const existingBuildings = aiPlayer.buildings.filter(b => b.isConstructed);
+    if (existingBuildings.length === 0) return null;
+
+    const candidates: Array<{ pos: Vector2; score: number }> = [];
+
+    for (const existing of existingBuildings) {
+      // Try positions around the existing building (in tile units, then convert to world)
+      const existingTileX = Math.floor(existing.position.x / GAME_CONFIG.TILE_SIZE);
+      const existingTileY = Math.floor(existing.position.y / GAME_CONFIG.TILE_SIZE);
+      const existingTileW = existing.width;
+      const existingTileH = existing.height;
+
+      const offsets = [
+        { x: -(buildingWidth), y: 0 },                    // Left
+        { x: existingTileW, y: 0 },                       // Right
+        { x: 0, y: -(buildingHeight) },                   // Above
+        { x: 0, y: existingTileH },                       // Below
+        { x: -(buildingWidth), y: -(buildingHeight) },    // Top-left
+        { x: existingTileW, y: -(buildingHeight) },       // Top-right
+        { x: -(buildingWidth), y: existingTileH },        // Bottom-left
+        { x: existingTileW, y: existingTileH },           // Bottom-right
+      ];
+
+      for (const offset of offsets) {
+        const candidateTileX = existingTileX + offset.x;
+        const candidateTileY = existingTileY + offset.y;
+
+        // Check bounds
+        if (candidateTileX < 0 || candidateTileY < 0) continue;
+        if (candidateTileX + buildingWidth > map.width) continue;
+        if (candidateTileY + buildingHeight > map.height) continue;
+
+        const candidateX = candidateTileX * GAME_CONFIG.TILE_SIZE;
+        const candidateY = candidateTileY * GAME_CONFIG.TILE_SIZE;
+
+        // Check overlap with existing buildings
+        const overlaps = existingBuildings.some(b => {
+          const bRight = b.position.x + b.width * GAME_CONFIG.TILE_SIZE;
+          const bBottom = b.position.y + b.height * GAME_CONFIG.TILE_SIZE;
+          const cRight = candidateX + buildingWidth * GAME_CONFIG.TILE_SIZE;
+          const cBottom = candidateY + buildingHeight * GAME_CONFIG.TILE_SIZE;
+          return candidateX < bRight && cRight > b.position.x &&
+                 candidateY < bBottom && cBottom > b.position.y;
+        });
+        if (overlaps) continue;
+
+        // Check if buildable terrain
+        let allBuildable = true;
+        for (let dy = 0; dy < buildingHeight; dy++) {
+          for (let dx = 0; dx < buildingWidth; dx++) {
+            const tile = map.tiles[candidateTileY + dy]?.[candidateTileX + dx];
+            if (!tile || !tile.buildable) {
+              allBuildable = false;
+              break;
+            }
+          }
+          if (!allBuildable) break;
+        }
+        if (!allBuildable) continue;
+
+        // Score this position
+        let score = 0;
+
+        // Find command center for distance calculations
+        const commandCenter = existingBuildings.find(b => b.type === BuildingType.COMMAND);
+
+        // Prefer positions close to command center (compact base)
+        if (commandCenter) {
+          const distToCC = Math.abs(candidateX - commandCenter.position.x) + Math.abs(candidateY - commandCenter.position.y);
+          score -= distToCC * 0.01;
+        }
+
+        // Defense buildings prefer to be on the perimeter
+        const isDefense = [BuildingType.TURRET, BuildingType.TESLA_COIL, BuildingType.FLAME_TOWER, BuildingType.DEFENSE, BuildingType.WALL].includes(buildingType);
+        if (isDefense && commandCenter) {
+          const distToCC = Math.abs(candidateX - commandCenter.position.x) + Math.abs(candidateY - commandCenter.position.y);
+          score += distToCC * 0.005;
+        }
+
+        // Economic buildings prefer to be near refineries
+        const isEconomic = [BuildingType.REFINERY, BuildingType.POWER, BuildingType.OIL_DERRICK].includes(buildingType);
+        if (isEconomic) {
+          const refineries = existingBuildings.filter(b => b.type === BuildingType.REFINERY);
+          if (refineries.length > 0) {
+            const nearestRefineryDist = Math.min(...refineries.map(r =>
+              Math.abs(candidateX - r.position.x) + Math.abs(candidateY - r.position.y)
+            ));
+            score -= nearestRefineryDist * 0.005;
+          }
+        }
+
+        // Refineries strongly prefer positions near unharvested resource nodes
+        if (buildingType === BuildingType.REFINERY) {
+          const resourceNodes = ctx.gameMap.resourceNodes;
+          if (resourceNodes.length > 0) {
+            // Find nearest resource node to this candidate position
+            let nearestResourceDist = Infinity;
+            for (const node of resourceNodes) {
+              const nodeWorldX = node.position.x * GAME_CONFIG.TILE_SIZE;
+              const nodeWorldY = node.position.y * GAME_CONFIG.TILE_SIZE;
+              const dist = Math.abs(candidateX - nodeWorldX) + Math.abs(candidateY - nodeWorldY);
+              if (dist < nearestResourceDist) {
+                nearestResourceDist = dist;
+              }
+            }
+            // Strong bonus for being close to resources (overrides compact base preference)
+            score += Math.max(0, 50 - nearestResourceDist * 0.02);
+          }
+        }
+
+        // Penalize positions that block paths between command center and resource nodes
+        const resourceNodes = ctx.gameMap.resourceNodes;
+        if (commandCenter && resourceNodes.length > 0) {
+          for (const node of resourceNodes) {
+            const nodeWorldX = node.position.x;
+            const nodeWorldY = node.position.y;
+            const ccToNodeDist = Math.abs(commandCenter.position.x - nodeWorldX) + Math.abs(commandCenter.position.y - nodeWorldY);
+            const ccToCandidateDist = Math.abs(commandCenter.position.x - candidateX) + Math.abs(commandCenter.position.y - candidateY);
+            const candidateToNodeDist = Math.abs(candidateX - nodeWorldX) + Math.abs(candidateY - nodeWorldY);
+            // If candidate is roughly on the path between CC and resource, penalize
+            if (ccToCandidateDist + candidateToNodeDist < ccToNodeDist * 1.3) {
+              score -= 5;
+            }
+          }
+        }
+
+        // Prefer positions adjacent to more existing buildings (compact base)
+        const adjacentCount = existingBuildings.filter(b => {
+          const dist = Math.abs(candidateX - b.position.x) + Math.abs(candidateY - b.position.y);
+          return dist < GAME_CONFIG.TILE_SIZE * 4; // Within 4 tiles
+        }).length;
+        score += adjacentCount * 0.5;
+
+        candidates.push({ pos: { x: candidateX, y: candidateY }, score });
+      }
+    }
+
+    // For refineries, also consider positions near distant resource nodes (expansion)
+    if (buildingType === BuildingType.REFINERY) {
+      const resourceNodes = ctx.gameMap.resourceNodes;
+      for (const node of resourceNodes) {
+        const nodeWorldX = node.position.x * GAME_CONFIG.TILE_SIZE;
+        const nodeWorldY = node.position.y * GAME_CONFIG.TILE_SIZE;
+        const nodeTileX = Math.floor(node.position.x);
+        const nodeTileY = Math.floor(node.position.y);
+
+        // Try positions adjacent to the resource node
+        const nodeOffsets = [
+          { x: -(buildingWidth), y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: -(buildingHeight) },
+          { x: 0, y: 1 },
+        ];
+
+        for (const offset of nodeOffsets) {
+          const candidateTileX = nodeTileX + offset.x;
+          const candidateTileY = nodeTileY + offset.y;
+
+          if (candidateTileX < 0 || candidateTileY < 0) continue;
+          if (candidateTileX + buildingWidth > map.width) continue;
+          if (candidateTileY + buildingHeight > map.height) continue;
+
+          const candidateX = candidateTileX * GAME_CONFIG.TILE_SIZE;
+          const candidateY = candidateTileY * GAME_CONFIG.TILE_SIZE;
+
+          // Check overlap
+          const overlaps = existingBuildings.some(b => {
+            const bRight = b.position.x + b.width * GAME_CONFIG.TILE_SIZE;
+            const bBottom = b.position.y + b.height * GAME_CONFIG.TILE_SIZE;
+            const cRight = candidateX + buildingWidth * GAME_CONFIG.TILE_SIZE;
+            const cBottom = candidateY + buildingHeight * GAME_CONFIG.TILE_SIZE;
+            return candidateX < bRight && cRight > b.position.x &&
+                   candidateY < bBottom && cBottom > b.position.y;
+          });
+          if (overlaps) continue;
+
+          // Check buildable
+          let allBuildable = true;
+          for (let dy = 0; dy < buildingHeight; dy++) {
+            for (let dx = 0; dx < buildingWidth; dx++) {
+              const tile = map.tiles[candidateTileY + dy]?.[candidateTileX + dx];
+              if (!tile || !tile.buildable) {
+                allBuildable = false;
+                break;
+              }
+            }
+            if (!allBuildable) break;
+          }
+          if (!allBuildable) continue;
+
+          // Score: very close to resource node = high score
+          let score = 80; // Base score for being next to a resource node
+          // Small penalty for being far from existing base (need some base connection)
+          const commandCenter = existingBuildings.find(b => b.type === BuildingType.COMMAND);
+          if (commandCenter) {
+            const distToCC = Math.abs(candidateX - commandCenter.position.x) + Math.abs(candidateY - commandCenter.position.y);
+            score -= distToCC * 0.003; // Mild penalty for distance
+          }
+          // Bonus for adjacency to any existing building
+          const adjacentCount = existingBuildings.filter(b => {
+            const dist = Math.abs(candidateX - b.position.x) + Math.abs(candidateY - b.position.y);
+            return dist < GAME_CONFIG.TILE_SIZE * 6;
+          }).length;
+          score += adjacentCount * 0.3;
+
+          candidates.push({ pos: { x: candidateX, y: candidateY }, score });
+        }
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Sort by score (highest first) and return the best position
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].pos;
+  }
+
   private cleanupCooldowns(): void {
-    const now = Date.now();
+    const now = this.getGameTimeMs();
     for (const [key, time] of this.actionCooldowns.entries()) {
       if (now > time) {
         this.actionCooldowns.delete(key);
@@ -1225,16 +1715,14 @@ export class AIBrain {
           targetBuilding = BuildingType.CHRONOSPHERE;
         }
 
-        const command = ctx.aiPlayer.buildings.find(b => b.type === BuildingType.COMMAND);
-        if (!command) return 'failure';
-
-        const baseX = Math.floor(command.position.x / 32);
-        const baseY = Math.floor(command.position.y / 32);
+        // Find best placement position using smart positioning
+        const position = this.findBestBuildingPosition(targetBuilding, ctx);
+        if (!position) return 'failure';
 
         this.pendingActions.push({
           type: 'build',
           buildingId: targetBuilding,
-          position: { x: (baseX + 8) * 32, y: (baseY + 8) * 32 },
+          position,
           priority: 5
         });
 
@@ -1277,9 +1765,10 @@ export class AIBrain {
 
     if (transports.length === 0) return actions;
 
-    // Find idle infantry not in a transport
+    // Find infantry not in a transport (idle, defending, or moving - not attacking/retreating)
     const infantry = aiPlayer.units.filter(u =>
-      u.isInfantry && !u.transportId && u.state === 'idle'
+      u.isInfantry && !u.transportId &&
+      (u.state === 'idle' || u.state === 'defending' || u.state === 'moving')
     );
 
     if (infantry.length === 0) return actions;
@@ -1321,12 +1810,12 @@ export class AIBrain {
         const enemyBase = ctx.gameMap.enemyBaseLocation;
         if (enemyBase) {
           actions.push({
-            type: 'activateSuperweapon' as any,
+            type: 'activateSuperweapon',
             buildingId: building.id,
             position: enemyBase,
             priority: 8
           });
-          this.actionCooldowns.set(cooldownKey, Date.now() + 10000);
+          this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 10000);
         }
       } else if (building.type === BuildingType.IRON_CURTAIN) {
         // Target cluster of friendly units near enemy base
@@ -1338,12 +1827,12 @@ export class AIBrain {
           const centerX = combatUnits.reduce((s, u) => s + u.position.x, 0) / combatUnits.length;
           const centerY = combatUnits.reduce((s, u) => s + u.position.y, 0) / combatUnits.length;
           actions.push({
-            type: 'activateSuperweapon' as any,
+            type: 'activateSuperweapon',
             buildingId: building.id,
             position: { x: centerX, y: centerY },
             priority: 7
           });
-          this.actionCooldowns.set(cooldownKey, Date.now() + 10000);
+          this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 10000);
         }
       } else if (building.type === BuildingType.CHRONOSPHERE) {
         // Teleport units from base to near enemy base
@@ -1356,14 +1845,202 @@ export class AIBrain {
           );
           if (idleCombatUnits.length >= 3) {
             actions.push({
-              type: 'activateChronosphere' as any,
+              type: 'activateChronosphere',
               buildingId: building.id,
               position: friendlyBase,
               targetPosition: { x: enemyBase.x - 100, y: enemyBase.y - 100 },
               priority: 8
             });
-            this.actionCooldowns.set(cooldownKey, Date.now() + 10000);
+            this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 10000);
           }
+        }
+      }
+    }
+
+    return actions;
+  }
+
+  private respondToSuperweaponThreat(ctx: AIContext): AIAction[] {
+    const actions: AIAction[] = [];
+    const store = useGameStore.getState();
+    const aiPlayer = store.aiPlayers.find(p => p.faction === ctx.aiPlayer.faction);
+    if (!aiPlayer) return actions;
+
+    // Check if any enemy player has a ready superweapon
+    const enemyPlayers = [store.currentPlayer, ...store.aiPlayers].filter(
+      p => p && p.id !== aiPlayer.id && !p.isDefeated &&
+        getFactionGroup(p.faction as Faction) !== getFactionGroup(aiPlayer.faction as Faction)
+    );
+
+    for (const enemy of enemyPlayers) {
+      const readySuperweapons = enemy.buildings.filter(b => b.superweaponReady && b.isConstructed);
+      for (const sw of readySuperweapons) {
+        const cooldownKey = `evade_sw_${sw.id}`;
+        if (this.actionCooldowns.has(cooldownKey)) continue;
+
+        // Nuclear silo: evacuate units near base center
+        if (sw.type === BuildingType.NUCLEAR_SILO) {
+          const baseCenter = ctx.gameMap.friendlyBaseLocation;
+          if (!baseCenter) continue;
+
+          const unitsNearBase = aiPlayer.units.filter(u =>
+            u.data?.canAttack && u.state !== 'attacking' &&
+            getDistance(u.position, baseCenter) < 300
+          );
+
+          if (unitsNearBase.length >= 2) {
+            for (const unit of unitsNearBase.slice(0, 6)) {
+              actions.push({
+                type: 'scatter',
+                unitId: unit.id,
+                position: unit.position,
+                priority: 9
+              });
+            }
+            this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 15000);
+          }
+        }
+        // Chronosphere: reinforce base defense
+        else if (sw.type === BuildingType.CHRONOSPHERE) {
+          const baseCenter = ctx.gameMap.friendlyBaseLocation;
+          if (!baseCenter) continue;
+
+          // Move idle defenders toward base
+          const idleDefenders = aiPlayer.units.filter(u =>
+            u.data?.canAttack && u.state === 'idle' &&
+            getDistance(u.position, baseCenter) > 200
+          );
+
+          if (idleDefenders.length >= 2) {
+            for (const unit of idleDefenders.slice(0, 4)) {
+              actions.push({
+                type: 'defend',
+                unitId: unit.id,
+                position: baseCenter,
+                priority: 7
+              });
+            }
+            this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 20000);
+          }
+        }
+        // Iron Curtain: prepare to focus fire on invulnerable units after effect ends
+        else if (sw.type === BuildingType.IRON_CURTAIN) {
+          // No immediate action needed - iron curtain is short duration
+          // Just set a cooldown to avoid repeated checks
+          this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 20000);
+        }
+      }
+    }
+
+    return actions;
+  }
+
+  private manageSellBuildings(ctx: AIContext): AIAction[] {
+    const actions: AIAction[] = [];
+    // Only sell when critically low on funds
+    if (ctx.resources.money > 500) return actions;
+
+    const cooldownKey = 'sell_buildings';
+    if (this.actionCooldowns.has(cooldownKey)) return actions;
+
+    const store = useGameStore.getState();
+    const aiPlayer = store.aiPlayers.find(p => p.faction === ctx.aiPlayer.faction);
+    if (!aiPlayer) return actions;
+
+    // Find heavily damaged or redundant buildings to sell
+    const sellableBuildings = aiPlayer.buildings.filter(b =>
+      b.isConstructed && b.type !== BuildingType.COMMAND &&
+      b.type !== BuildingType.BARRACKS && b.type !== BuildingType.WARFACTORY &&
+      b.type !== BuildingType.REFINERY && b.type !== BuildingType.POWER
+    );
+
+    // Sort by health ratio (sell most damaged first) then by cost (sell cheapest first)
+    sellableBuildings.sort((a, b) => {
+      const healthRatioA = a.health / a.maxHealth;
+      const healthRatioB = b.health / b.maxHealth;
+      if (healthRatioA !== healthRatioB) return healthRatioA - healthRatioB;
+      return (a.data.cost || 0) - (b.data.cost || 0);
+    });
+
+    // Sell up to 2 buildings
+    for (let i = 0; i < Math.min(2, sellableBuildings.length); i++) {
+      const building = sellableBuildings[i];
+      actions.push({
+        type: 'sellBuilding' as AIActionType,
+        buildingId: building.id,
+        priority: 3
+      });
+    }
+
+    if (actions.length > 0) {
+      this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 30000);
+    }
+
+    return actions;
+  }
+
+  private manageChronoAbilities(ctx: AIContext): AIAction[] {
+    const actions: AIAction[] = [];
+    const store = useGameStore.getState();
+    const aiPlayer = store.aiPlayers.find(p => p.faction === ctx.aiPlayer.faction);
+    if (!aiPlayer) return actions;
+
+    // Find Chrono Legionnaires that are idle and not on cooldown
+    const chronoUnits = aiPlayer.units.filter(u =>
+      u.type === UnitType.CHRONO && !u.isChronoShifting && !u.isChronoCooldown &&
+      (u.state === 'idle' || u.state === UnitState.GUARDING)
+    );
+
+    if (chronoUnits.length === 0) return actions;
+
+    // Cooldown: don't chrono shift too frequently
+    const cooldownKey = 'chrono_shift';
+    if (this.actionCooldowns.has(cooldownKey)) return actions;
+
+    for (const chrono of chronoUnits) {
+      // Find enemy units or buildings to teleport near
+      const enemyTargets = ctx.enemyPlayer.units.filter(u =>
+        u.data?.canAttack && u.health > u.maxHealth * 0.3
+      );
+
+      if (enemyTargets.length === 0) continue;
+
+      // Find the nearest enemy cluster
+      const target = enemyTargets.reduce((best, enemy) => {
+        const nearbyEnemies = enemyTargets.filter(e =>
+          getDistance(e.position, enemy.position) < 200
+        );
+        if (nearbyEnemies.length > best.count) {
+          return { enemy, count: nearbyEnemies.length };
+        }
+        return best;
+      }, { enemy: enemyTargets[0], count: 0 });
+
+      if (target.count >= 2) {
+        // Teleport to a position near the enemy cluster but at attack range
+        const targetPos = target.enemy.position;
+        const dx = chrono.position.x - targetPos.x;
+        const dy = chrono.position.y - targetPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Only chrono shift if far enough away to make it worthwhile
+        if (dist > 400) {
+          const chronoRange = (chrono.data?.attackRange || 6) * GAME_CONFIG.TILE_SIZE;
+          const shiftPos = {
+            x: Math.max(0, Math.min(ctx.gameMap.width * GAME_CONFIG.TILE_SIZE,
+              targetPos.x + (dx / dist) * chronoRange)),
+            y: Math.max(0, Math.min(ctx.gameMap.height * GAME_CONFIG.TILE_SIZE,
+              targetPos.y + (dy / dist) * chronoRange)),
+          };
+
+          actions.push({
+            type: 'chronoShift',
+            unitId: chrono.id,
+            position: shiftPos,
+            priority: 6
+          });
+          this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 8000);
+          break; // Only one chrono shift per update cycle
         }
       }
     }

@@ -19,8 +19,10 @@ import { HotkeyManager, HOTKEY_CONFIG, UnitGroupManager, type HotkeyConfig } fro
 import { PathfindingManager, PATHFINDING_CONFIG, type PathfindingConfig } from '../systems/PathfindingManager';
 import { EffectSystem } from './EffectSystem';
 import { IndicatorSystem } from './IndicatorSystem';
-import { gameEventBridge } from '../systems/GameEventBridge';
 import { gameEventBus } from '../systems/GameEventBus';
+import { GameUIController } from '../ui/GameUIController';
+import { captureSystem } from '../systems/CaptureSystem';
+import { gameEventBridge } from '../systems/GameEventBridge';
 import { isAlliedFaction } from '../config/FactionTheme';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { SystemManager } from '../systems/SystemManager';
@@ -35,6 +37,7 @@ export interface UnitRenderState {
   health: number;
   maxHealth: number;
   rank: UnitRank;
+  isInvulnerable?: boolean;
 }
 
 export interface BuildingRenderState {
@@ -49,9 +52,8 @@ export interface BuildingRenderState {
 }
 
 function normalizeAngle(angle: number): number {
-  while (angle < 0) angle += Math.PI * 2;
-  while (angle >= Math.PI * 2) angle -= Math.PI * 2;
-  return angle;
+  if (!isFinite(angle)) return 0;
+  return ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 }
 
 function rotationToDirectionIndex(rotation: number): number {
@@ -142,6 +144,8 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
   private worldHeight: number = 0;
   private animationFrame: number = 0;
   private animationTimer: number = 0;
+  private eventUnsubscribers: (() => void)[] = [];
+  private dynamicObstacleFrame: number = 0;
   private isDestroyed: boolean = false;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasdKeys?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
@@ -295,25 +299,41 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.connectEventBridge();
 
     // Listen for pathfinding obstacle changes (walls placed/destroyed)
-    gameEventBus.on('pathfinding:obstaclesChanged', () => {
-      this.updatePathfindingObstaclesFromStore();
-    });
+    this.eventUnsubscribers.push(
+      gameEventBus.on('pathfinding:obstaclesChanged', () => {
+        this.updatePathfindingObstaclesFromStore();
+      })
+    );
 
     // Listen for minimap ping events and show ping effect in main view
-    gameEventBus.on('map:ping', (event) => {
-      const data = event.data as { position: { x: number; y: number } } | undefined;
-      if (data?.position) {
-        this.showPingEffect(data.position.x, data.position.y);
-      }
-    });
+    this.eventUnsubscribers.push(
+      gameEventBus.on('map:ping', (event) => {
+        const data = event.data as { position: { x: number; y: number } } | undefined;
+        if (data?.position) {
+          this.showPingEffect(data.position.x, data.position.y);
+        }
+      })
+    );
+
+    // Listen for map reveal events (e.g. reveal crate)
+    this.eventUnsubscribers.push(
+      gameEventBus.on('map:reveal', (event) => {
+        const data = event.data as { position: { x: number; y: number }; radius: number } | undefined;
+        if (data && this.fogOfWar) {
+          this.fogOfWar.revealArea(data.position.x, data.position.y, data.radius);
+        }
+      })
+    );
 
     // Listen for camera center events (e.g. Tab cycling units)
-    gameEventBus.on('camera:centerOn', (event) => {
-      const data = event.data as { x: number; y: number } | undefined;
-      if (data) {
-        this.centerCameraOnWorld(data.x, data.y);
-      }
-    });
+    this.eventUnsubscribers.push(
+      gameEventBus.on('camera:centerOn', (event) => {
+        const data = event.data as { x: number; y: number } | undefined;
+        if (data) {
+          this.centerCameraOnWorld(data.x, data.y);
+        }
+      })
+    );
 
     // Emit event so usePhaser knows scene is ready
     this.events.emit('sceneReady');
@@ -438,7 +458,7 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
         }
         break;
       case 'build':
-        // Toggle build panel is handled by UI - emit event
+        GameUIController.getInstance().setActivePanel('build');
         break;
       case 'stanceAggressive':
         if (useGameStore.getState().selectedUnits.length > 0) {
@@ -467,6 +487,40 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       case 'cycleNextUnit':
         inputHandler.cycleNextUnit();
         break;
+      case 'toggleRallyPoint':
+        if (useGameStore.getState().selectedBuilding) {
+          inputHandler.setPendingCommandExternal('rally');
+        }
+        break;
+      case 'selectAll': {
+        const store = useGameStore.getState();
+        if (store.currentPlayer) {
+          store.selectUnits(store.currentPlayer.units);
+        }
+        break;
+      }
+      case 'split': {
+        const store = useGameStore.getState();
+        const selected = store.selectedUnits;
+        if (selected.length > 1) {
+          // Keep first half selected, deselect second half
+          const mid = Math.ceil(selected.length / 2);
+          store.selectUnits(selected.slice(0, mid));
+        }
+        break;
+      }
+      case 'set_formation_1':
+      case 'set_formation_2':
+      case 'set_formation_3': {
+        const formationIndex = parseInt(action.replace('set_formation_', '')) - 1;
+        const store = useGameStore.getState();
+        if (store.selectedUnits.length > 0) {
+          const groupId = formationIndex + 1; // Groups 1-3
+          this.groupManager?.createGroup(groupId, store.selectedUnits.map(u => u.id));
+          gameEventBus.emit('ui:notification', { message: `编队 ${formationIndex + 1} 已设置`, type: 'info' });
+        }
+        break;
+      }
     }
   }
 
@@ -533,9 +587,12 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.renderPlacementPreview();
     this.renderSelectionBox();
     this.renderMovePreview();
-    this.systemManager?.update(time, delta);
-    this.effectSystem?.updateProjectiles();
-    this.updateDynamicObstacles();
+    const isPaused = useGameStore.getState().isPaused;
+    if (!isPaused) {
+      this.systemManager?.update(time, delta);
+      this.effectSystem?.updateProjectiles();
+      this.updateDynamicObstacles();
+    }
     this.updateSoundCameraPosition();
     this.updateFogOfWar(time);
   }
@@ -700,7 +757,6 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
   }
 
   private updateSelectionVisuals(): void {
-    if (!this.selectionDirty) return;
     this.unitSprites.forEach((sprite, id) => {
       const state = this.unitStates.get(id);
       if (state?.isSelected) {
@@ -725,17 +781,29 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
         );
       }
     });
-    this.selectionDirty = false;
   }
 
   private updateHealthBars(): void {
-    if (!this.healthBarsDirty) return;
+    // Check for active captures that need real-time progress updates
+    const store = useGameStore.getState();
+    const allPlayers = [store.currentPlayer, ...store.aiPlayers].filter(Boolean) as Player[];
+    const hasActiveCapture = allPlayers.some(p =>
+      p.units.some(u => u.data.canCapture && u.state === 'capturing')
+    );
+    if (!this.healthBarsDirty && !hasActiveCapture) return;
     this.unitHealthBars.forEach((graphics, id) => {
       const state = this.unitStates.get(id);
       const sprite = this.unitSprites.get(id);
 
       graphics.clear();
       if (state && sprite) {
+        // Draw invulnerability indicator (Iron Curtain)
+        if (state.isInvulnerable) {
+          const pulse = 0.5 + 0.5 * Math.sin(this.time.now / 200);
+          graphics.lineStyle(2, 0xffd700, pulse);
+          graphics.strokeCircle(sprite.x, sprite.y, 18);
+        }
+
         // Draw rank badge above unit
         if (state.rank !== UnitRank.ROOKIE) {
           const badgeY = sprite.y - RENDER_CONFIG.unitHealthBarOffsetY - 10;
@@ -780,6 +848,27 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
             state.maxHealth
           );
         }
+
+        // Building damage smoke effect
+        const healthPercent = state.health / state.maxHealth;
+        if (healthPercent < 0.75 && state.isConstructed) {
+          // Emit smoke particles for damaged buildings
+          if (this.effectSystem) {
+            const smokeIntensity = healthPercent < 0.25 ? 'heavy' : healthPercent < 0.5 ? 'medium' : 'light';
+            const smokeKey = `building_smoke_${id}`;
+            // Only emit every ~2 seconds to avoid spam
+            const now = this.time.now;
+            const lastSmoke = (sprite as Phaser.GameObjects.Image).getData('lastSmokeTime') as number || 0;
+            if (now - lastSmoke > 2000) {
+              (sprite as Phaser.GameObjects.Image).setData('lastSmokeTime', now);
+              this.effectSystem.playSmoke(sprite.x, sprite.y - state.height * 0.3);
+              if (smokeIntensity === 'heavy') {
+                this.effectSystem.playSmoke(sprite.x - 10, sprite.y - state.height * 0.5);
+              }
+            }
+          }
+        }
+
         // Draw ore storage bar for refineries
         if (state.oreStorage !== undefined && state.maxOreStorage) {
           const oreBarY = barY + (state.health < state.maxHealth ? RENDER_CONFIG.healthBarHeight + 3 : 0);
@@ -790,6 +879,14 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
             state.oreStorage,
             state.maxOreStorage
           );
+        }
+
+        // Draw capture progress bar if building is being captured
+        const activeCaptures = captureSystem.getActiveCaptures();
+        const captureProgress = activeCaptures.get(id) || 0;
+        if (captureProgress > 0) {
+          const captureBarY = barY + (state.health < state.maxHealth ? RENDER_CONFIG.healthBarHeight + 3 : 0) + (state.oreStorage !== undefined ? 7 : 0);
+          this.drawCaptureBar(graphics, sprite.x, captureBarY, captureProgress);
         }
       }
     });
@@ -836,6 +933,28 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     // Amber/yellow color for ore
     graphics.fillStyle(0xd4a017, 1);
     graphics.fillRect(x - width / 2, y, width * orePercent, height);
+  }
+
+  private drawCaptureBar(
+    graphics: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    progress: number
+  ): void {
+    const { healthBarWidth: width } = RENDER_CONFIG;
+    const height = 4;
+    const capturePercent = Math.max(0, Math.min(1, progress));
+
+    graphics.fillStyle(HEALTH_BAR_COLORS.background, HEALTH_BAR_COLORS.backgroundAlpha);
+    graphics.fillRect(x - width / 2 - 1, y - 1, width + 2, height + 2);
+
+    graphics.fillStyle(0x1a1a1a, 1);
+    graphics.fillRect(x - width / 2, y, width, height);
+
+    // Red-orange pulsing color for capture progress
+    const pulse = 0.8 + Math.sin(this.time.now / 200) * 0.2;
+    graphics.fillStyle(0xff6600, pulse);
+    graphics.fillRect(x - width / 2, y, width * capturePercent, height);
   }
 
   private drawStar(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, size: number): void {
@@ -1059,6 +1178,13 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.selectionGraphics?.destroy();
     this.movePreviewLine?.destroy();
     this.movePreviewLine = null;
+    this.crateGraphics?.destroy();
+    this.crateGraphics = undefined;
+    this.waypointGraphics?.destroy();
+    this.waypointGraphics = undefined;
+
+    this.eventUnsubscribers.forEach(unsub => unsub());
+    this.eventUnsubscribers = [];
 
     this.fogOfWar?.dispose();
     this.soundManager?.dispose();
@@ -1107,6 +1233,8 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
 
   private updateDynamicObstacles(): void {
     if (!this.pathfindingManager) return;
+    // Update every 6 frames (~10Hz at 60fps) to reduce GC pressure from temp arrays
+    if (++this.dynamicObstacleFrame % 6 !== 0) return;
     const store = useGameStore.getState();
     const allPlayers = [store.currentPlayer, ...store.aiPlayers].filter(Boolean) as Player[];
     const allUnits = allPlayers.flatMap(p => p.units);
@@ -1654,6 +1782,52 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.healthBarsDirty = true;
   }
 
+  removeUnit(id: string): void {
+    const sprite = this.unitSprites.get(id);
+    if (sprite) {
+      // Clean up rank glow
+      const existingGlow = sprite.getData('rankGlowGraphics');
+      if (existingGlow) {
+        (existingGlow as Phaser.GameObjects.Arc).destroy();
+      }
+      sprite.destroy();
+      this.unitSprites.delete(id);
+    }
+    const healthBar = this.unitHealthBars.get(id);
+    if (healthBar) {
+      healthBar.destroy();
+      this.unitHealthBars.delete(id);
+    }
+    const groupBadge = this.unitGroupBadges.get(id);
+    if (groupBadge) {
+      groupBadge.destroy();
+      this.unitGroupBadges.delete(id);
+    }
+    // Clean up unit from control groups
+    this.groupManager?.removeUnitFromAllGroups(id);
+    this.unitStates.delete(id);
+  }
+
+  removeBuilding(id: string): void {
+    const sprite = this.buildingSprites.get(id);
+    if (sprite) {
+      sprite.destroy();
+      this.buildingSprites.delete(id);
+    }
+    const healthBar = this.buildingHealthBars.get(id);
+    if (healthBar) {
+      healthBar.destroy();
+      this.buildingHealthBars.delete(id);
+    }
+    const powerIcon = this.powerWarningIcons.get(id);
+    if (powerIcon) {
+      this.tweens.killTweensOf(powerIcon);
+      powerIcon.destroy();
+      this.powerWarningIcons.delete(id);
+    }
+    this.buildingStates.delete(id);
+  }
+
   setUnitSelected(id: string, selected: boolean): void {
     const state = this.unitStates.get(id);
     if (state) {
@@ -1689,6 +1863,14 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     }
   }
 
+  setUnitInvulnerable(id: string, isInvulnerable: boolean): void {
+    const state = this.unitStates.get(id);
+    if (state) {
+      this.unitStates.set(id, { ...state, isInvulnerable });
+      this.healthBarsDirty = true;
+    }
+  }
+
   setUnitRank(id: string, rank: UnitRank): void {
     const state = this.unitStates.get(id);
     if (state) {
@@ -1707,6 +1889,7 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
           try {
             const fx = (sprite as any).postFX;
             if (fx) {
+              fx.clear(); // Clear previous glow before adding new one
               fx.addGlow(glowColor, 0, 0, 1.5, 0.5);
               glowAdded = true;
             }

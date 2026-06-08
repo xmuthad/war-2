@@ -81,6 +81,7 @@ const ALL_UPGRADES: Upgrade[] = [
     factionGroup: FactionGroup.ALLIED,
     description: '研发先进火炮技术，提升车辆伤害',
     effect: '+25% 载具伤害',
+    prerequisites: [UpgradeType.ARMOR_REINFORCE],
   },
   {
     type: UpgradeType.PRISM_TECH,
@@ -89,8 +90,9 @@ const ALL_UPGRADES: Upgrade[] = [
     researchTime: 30,
     requiredBuildings: [BuildingType.WARFACTORY, BuildingType.TECH],
     factionGroup: FactionGroup.ALLIED,
-    description: '解锁光棱科技，可生产光棱坦克',
-    effect: '解锁光棱坦克',
+    description: '解锁光棱科技，可生产光棱坦克并增强光棱武器威力',
+    effect: '解锁光棱坦克，光棱坦克攻击+15%',
+    prerequisites: [UpgradeType.ADVANCED_ARTILLERY],
   },
   {
     type: UpgradeType.CHRONO_TECH,
@@ -99,8 +101,9 @@ const ALL_UPGRADES: Upgrade[] = [
     researchTime: 60,
     requiredBuildings: [BuildingType.TECH],
     factionGroup: FactionGroup.ALLIED,
-    description: '解锁超时空科技，可生产超时空军团兵',
-    effect: '解锁超时空军团兵',
+    description: '解锁超时空科技，可生产超时空军团兵并优化传送冷却',
+    effect: '解锁超时空军团兵，传送冷却-30%',
+    prerequisites: [UpgradeType.PRISM_TECH],
   },
 
   // Soviet upgrades
@@ -141,8 +144,9 @@ const ALL_UPGRADES: Upgrade[] = [
     researchTime: 25,
     requiredBuildings: [BuildingType.BARRACKS, BuildingType.TECH],
     factionGroup: FactionGroup.SOVIET,
-    description: '研发特斯拉武器，解锁磁能坦克生产',
-    effect: '解锁磁能坦克',
+    description: '研发特斯拉武器，解锁磁能坦克并增强电磁攻击',
+    effect: '解锁磁能坦克，特斯拉单位攻击+20%',
+    prerequisites: [UpgradeType.CONSCRIPT_ATTACK],
   },
   {
     type: UpgradeType.ELITE_FORCES,
@@ -151,8 +155,9 @@ const ALL_UPGRADES: Upgrade[] = [
     researchTime: 28,
     requiredBuildings: [BuildingType.BARRACKS, BuildingType.TECH],
     factionGroup: FactionGroup.SOVIET,
-    description: '训练精锐部队，解锁特殊单位生产',
-    effect: '解锁特殊单位',
+    description: '训练精锐部队，解锁特殊单位并强化步兵攻击',
+    effect: '解锁特殊单位，步兵攻击+10%',
+    prerequisites: [UpgradeType.TESLA_WEAPONS],
   },
   {
     type: UpgradeType.HEAVY_ARMOR,
@@ -183,6 +188,7 @@ const ALL_UPGRADES: Upgrade[] = [
     factionGroup: FactionGroup.SOVIET,
     description: '研发电磁脉冲技术，可瘫痪敌方电力',
     effect: '解锁EMP能力',
+    prerequisites: [UpgradeType.HEAVY_ARMOR],
   },
 ];
 

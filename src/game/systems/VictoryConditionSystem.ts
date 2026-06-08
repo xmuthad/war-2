@@ -43,12 +43,13 @@ export class VictoryConditionSystem {
       return result;
     }
 
-    // Check AI defeat
+    // Check AI defeat: must have no buildings AND no units to be defeated
     const defeatedAiIds: string[] = [];
     for (const ai of aiPlayers) {
       if (ai.isDefeated) continue;
       const aiHasAnyBuilding = ai.buildings.some(b => b.isConstructed);
-      if (!aiHasAnyBuilding) {
+      const aiHasAnyUnit = ai.units.length > 0;
+      if (!aiHasAnyBuilding && !aiHasAnyUnit) {
         defeatedAiIds.push(ai.id);
       }
     }

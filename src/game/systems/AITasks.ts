@@ -66,7 +66,9 @@ export type AIActionType =
   | 'loadTransport'
   | 'unloadTransport'
   | 'activateSuperweapon'
-  | 'activateChronosphere';
+  | 'activateChronosphere'
+  | 'chronoShift'
+  | 'sellBuilding';
 
 export const createConditionCheck = (
   id: string,

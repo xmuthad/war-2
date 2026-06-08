@@ -41,9 +41,12 @@ export interface AIUnit {
   targetPosition?: { x: number; y: number };
   cargo?: number;
   isInfantry?: boolean;
+  isAirborne?: boolean;
   transportId?: string;
   passengers?: string[];
   maxPassengers?: number;
+  isChronoShifting?: boolean;
+  isChronoCooldown?: boolean;
   data?: {
     canAttack?: boolean;
     canHarvest?: boolean;
@@ -59,6 +62,8 @@ export interface AIBuilding {
   health: number;
   maxHealth: number;
   isConstructed: boolean;
+  isPowered?: boolean;
+  canProduce?: string[];
   productionQueue: string[];
   isActive: boolean;
   rallyPoint?: { x: number; y: number };

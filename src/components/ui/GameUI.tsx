@@ -1,11 +1,23 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { gameUIController, ContextMenuItem } from '../../game/ui/GameUIController';
-import { UnitType, UnitState, UnitRank, UnitData, UnitStance, BuildingType, Faction } from '../../types';
+import { UnitType, UnitState, UnitRank, UnitData, UnitStance, BuildingType, Faction, getFactionGroup } from '../../types';
 import { GAME_CONFIG } from '../../game/config/GameConfig';
 import { inputHandler } from '../../game/engine/InputHandler';
 import { UNITS_BY_FACTION } from '../../game/systems/AIUnitLookup';
 import { gameEventBus } from '../../game/systems/GameEventBus';
+
+const INFANTRY_TYPES = new Set([
+  UnitType.SOLDIER, UnitType.ROCKET, UnitType.SNIPER, UnitType.SEAL,
+  UnitType.TANYA, UnitType.CONSCRIPT, UnitType.FLAKINFANTRY,
+  UnitType.TERRORIST, UnitType.IVAN, UnitType.ENGINEER, UnitType.CHRONO,
+]);
+
+function getDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 import { ACHIEVEMENTS } from '../../game/data/achievements';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 import { Minimap } from './Minimap';
@@ -301,29 +313,27 @@ const DetailedTooltip: React.FC<{
 };
 
 export const GameUI: React.FC = () => {
-  const {
-    selectedUnits,
-    selectedBuilding,
-    currentPlayer,
-    alertLevel,
-    produceUnit,
-    resources,
-    isObserverMode,
-    isPaused,
-    aiPlayers,
-    gameSpeed,
-    setGameSpeed,
-    newAchievement,
-    clearNewAchievement,
-    tutorialActive,
-    tutorialStep,
-    startTutorial,
-    endTutorial,
-    setTutorialStep,
-    selectIdleMiners,
-    selectIdleMilitary,
-    togglePause,
-  } = useGameStore();
+  const selectedUnits = useGameStore(s => s.selectedUnits);
+  const selectedBuilding = useGameStore(s => s.selectedBuilding);
+  const currentPlayer = useGameStore(s => s.currentPlayer);
+  const alertLevel = useGameStore(s => s.alertLevel);
+  const produceUnit = useGameStore(s => s.produceUnit);
+  const resources = useGameStore(s => s.resources);
+  const isObserverMode = useGameStore(s => s.isObserverMode);
+  const isPaused = useGameStore(s => s.isPaused);
+  const aiPlayers = useGameStore(s => s.aiPlayers);
+  const gameSpeed = useGameStore(s => s.gameSpeed);
+  const setGameSpeed = useGameStore(s => s.setGameSpeed);
+  const newAchievement = useGameStore(s => s.newAchievement);
+  const clearNewAchievement = useGameStore(s => s.clearNewAchievement);
+  const tutorialActive = useGameStore(s => s.tutorialActive);
+  const tutorialStep = useGameStore(s => s.tutorialStep);
+  const startTutorial = useGameStore(s => s.startTutorial);
+  const endTutorial = useGameStore(s => s.endTutorial);
+  const setTutorialStep = useGameStore(s => s.setTutorialStep);
+  const selectIdleMiners = useGameStore(s => s.selectIdleMiners);
+  const selectIdleMilitary = useGameStore(s => s.selectIdleMilitary);
+  const togglePause = useGameStore(s => s.togglePause);
 
   const [uiState, setUiState] = useState(() => gameUIController.getState());
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
@@ -332,6 +342,8 @@ export const GameUI: React.FC = () => {
   const mousePosRef = useRef({ x: 0, y: 0 });
   const [unitResponse, setUnitResponse] = useState<string | null>(null);
   const responseTimerRef = useRef<number>(0);
+  const selectedUnitsRef = useRef(selectedUnits);
+  selectedUnitsRef.current = selectedUnits;
   const [showUnitTooltip, setShowUnitTooltip] = useState(false);
   const [showBuildingTooltip, setShowBuildingTooltip] = useState(false);
   const unitPanelRef = useRef<HTMLDivElement | null>(null);
@@ -363,8 +375,9 @@ export const GameUI: React.FC = () => {
   useEffect(() => {
     if (isObserverMode) return;
     const unsubMove = gameEventBus.on('unit:move', () => {
-      if (selectedUnits.length > 0) {
-        const unit = selectedUnits[0];
+      const units = selectedUnitsRef.current;
+      if (units.length > 0) {
+        const unit = units[0];
         const text = getUnitResponse(unit.type, 'move');
         setUnitResponse(text);
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
@@ -372,8 +385,9 @@ export const GameUI: React.FC = () => {
       }
     });
     const unsubAttack = gameEventBus.on('unit:attack', () => {
-      if (selectedUnits.length > 0) {
-        const unit = selectedUnits[0];
+      const units = selectedUnitsRef.current;
+      if (units.length > 0) {
+        const unit = units[0];
         const text = getUnitResponse(unit.type, 'attack');
         setUnitResponse(text);
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
@@ -384,7 +398,7 @@ export const GameUI: React.FC = () => {
       unsubMove();
       unsubAttack();
     };
-  }, [selectedUnits, isObserverMode]);
+  }, [isObserverMode]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -461,8 +475,9 @@ export const GameUI: React.FC = () => {
 
       if (unit.data.canHarvest) {
         buttons.push(
-          { id: 'harvest', icon: '⛏️', label: '采集', hotkey: 'H', tooltip: '开始采集资源',
-            onClick: () => {/* right-click on resource handles this */} }
+          { id: 'harvest', icon: '⛏️', label: '采集', hotkey: 'H', tooltip: '右键点击资源点进行采集',
+            active: pendingCommand === 'harvest',
+            onClick: () => { setPendingCommand('harvest'); inputHandler.setPendingCommandExternal('harvest'); } }
         );
       }
 
@@ -483,6 +498,63 @@ export const GameUI: React.FC = () => {
         }
       );
 
+      // Load button: when infantry selected and friendly transport nearby
+      if (currentPlayer && INFANTRY_TYPES.has(unit.type) && !unit.transportId) {
+        const nearbyTransport = currentPlayer.units.find(u =>
+          u.maxPassengers && u.passengers &&
+          u.passengers.length < (u.maxPassengers || 0) &&
+          !u.transportId &&
+          getFactionGroup(u.faction) === getFactionGroup(unit.faction) &&
+          getDistance(u.position, unit.position) < 3 * GAME_CONFIG.TILE_SIZE
+        );
+        if (nearbyTransport) {
+          buttons.push(
+            { id: 'load', icon: '📥', label: '装载', hotkey: 'T', tooltip: '装载到附近运输载具 (T)',
+              onClick: () => {
+                for (const u of selectedUnits) {
+                  if (INFANTRY_TYPES.has(u.type) && !u.transportId) {
+                    const transport = currentPlayer.units.find(t =>
+                      t.maxPassengers && t.passengers &&
+                      t.passengers.length < (t.maxPassengers || 0) &&
+                      !t.transportId &&
+                      getFactionGroup(t.faction) === getFactionGroup(u.faction) &&
+                      getDistance(t.position, u.position) < 3 * GAME_CONFIG.TILE_SIZE
+                    );
+                    if (transport) store.loadIntoTransport(u.id, transport.id);
+                  }
+                }
+              }
+            }
+          );
+        }
+      }
+
+      // Load button: when transport selected and friendly infantry nearby
+      if (currentPlayer && unit.maxPassengers && unit.passengers &&
+          unit.passengers.length < (unit.maxPassengers || 0)) {
+        const nearbyInfantry = currentPlayer.units.find(u =>
+          INFANTRY_TYPES.has(u.type) && !u.transportId &&
+          getFactionGroup(u.faction) === getFactionGroup(unit.faction) &&
+          getDistance(u.position, unit.position) < 3 * GAME_CONFIG.TILE_SIZE
+        );
+        if (nearbyInfantry) {
+          buttons.push(
+            { id: 'loadNearby', icon: '📥', label: '装载', hotkey: 'T', tooltip: '装载附近步兵 (T)',
+              onClick: () => {
+                const infantryToLoad = currentPlayer.units.filter(u =>
+                  INFANTRY_TYPES.has(u.type) && !u.transportId &&
+                  getFactionGroup(u.faction) === getFactionGroup(unit.faction) &&
+                  getDistance(u.position, unit.position) < 3 * GAME_CONFIG.TILE_SIZE
+                ).slice(0, (unit.maxPassengers || 0) - (unit.passengers?.length || 0));
+                for (const inf of infantryToLoad) {
+                  store.loadIntoTransport(inf.id, unit.id);
+                }
+              }
+            }
+          );
+        }
+      }
+
       // Unload button for transport vehicles with passengers
       if (unit.passengers && unit.passengers.length > 0) {
         buttons.push(
@@ -498,8 +570,21 @@ export const GameUI: React.FC = () => {
         );
       }
 
-      // Repair button for damaged vehicles
-      const isVehicle = !unit.data.isAirborne && !unit.data.canHarvest && !unit.data.canCapture;
+      // Capture button for engineers
+      if (unit.data.canCapture) {
+        buttons.push(
+          { id: 'capture', icon: '🏴', label: '占领', hotkey: 'C', tooltip: '右键点击敌方/中立建筑进行占领 (C)',
+            active: pendingCommand === 'capture',
+            onClick: () => {
+              setPendingCommand('capture');
+              inputHandler.setPendingCommandExternal('capture');
+            }
+          }
+        );
+      }
+
+      // Repair button for damaged vehicles (not infantry, not airborne, not harvesters)
+      const isVehicle = !INFANTRY_TYPES.has(unit.type) && !unit.data.isAirborne && !unit.data.canHarvest;
       if (isVehicle && unit.health < unit.maxHealth) {
         const hasRepairFactory = currentPlayer?.buildings.some(b =>
           b.type === BuildingType.REPAIR && b.isConstructed
@@ -540,7 +625,8 @@ export const GameUI: React.FC = () => {
             onClick: () => { store.sellBuilding(selectedBuilding.id); } },
           { id: 'rally', icon: '📍', label: '集结点', hotkey: 'Q',
             tooltip: '右键点击地图设置集结点',
-            onClick: () => {/* right-click on map sets rally */} }
+            active: pendingCommand === 'rally',
+            onClick: () => { setPendingCommand('rally'); inputHandler.setPendingCommandExternal('rally'); } }
         );
 
         if (selectedBuilding.data.canProduce) {
@@ -604,7 +690,7 @@ export const GameUI: React.FC = () => {
     }
 
     return [];
-  }, [selectedUnits, selectedBuilding, produceUnit, currentPlayer?.faction]);
+  }, [selectedUnits, selectedBuilding, produceUnit, currentPlayer?.faction, pendingCommand, currentPlayer?.units]);
 
   const handleButtonHover = (buttonId: string | null) => {
     setHoveredButton(buttonId);
@@ -644,6 +730,18 @@ export const GameUI: React.FC = () => {
     const unit = selectedUnits[0];
     const healthPercent = (unit.health / unit.maxHealth) * 100;
 
+    // Group selected units by type for multi-selection display
+    const unitTypeGroups = selectedUnits.length > 1
+      ? Object.entries(
+          selectedUnits.reduce<Record<string, { name: string; count: number }>>((acc, u) => {
+            const key = u.type;
+            if (!acc[key]) acc[key] = { name: u.data.name || u.type, count: 0 };
+            acc[key].count++;
+            return acc;
+          }, {})
+        ).map(([_, v]) => v)
+      : [];
+
     return (
       <div className="game-ui-panel unit-panel" role="region" aria-label="单位信息"
         ref={unitPanelRef}
@@ -656,6 +754,16 @@ export const GameUI: React.FC = () => {
             {selectedUnits.length > 1 && `x${selectedUnits.length}`}
           </span>
         </div>
+
+        {unitTypeGroups.length > 1 && (
+          <div className="unit-type-groups">
+            {unitTypeGroups.map((g, i) => (
+              <span key={i} className="unit-type-group">
+                {g.name} x{g.count}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="unit-portrait">
           <div
@@ -771,6 +879,12 @@ export const GameUI: React.FC = () => {
             </div>
           )}
 
+          {unit.data.description && (
+            <div className="unit-description">
+              <span className="description-text">{unit.data.description}</span>
+            </div>
+          )}
+
           {unit.maxPassengers && (
             <div className="stat-row" role="listitem">
               <span className="stat-label">乘客</span>
@@ -808,9 +922,9 @@ export const GameUI: React.FC = () => {
         <div className="stance-buttons">
           <span className="stance-label">姿态</span>
           {([
-            { stance: UnitStance.AGGRESSIVE, label: '激进', hotkey: 'A', icon: '⚔️' },
-            { stance: UnitStance.GUARD, label: '防御', hotkey: 'G', icon: '🛡️' },
-            { stance: UnitStance.PASSIVE, label: '被动', hotkey: 'P', icon: '🕊️' },
+            { stance: UnitStance.AGGRESSIVE, label: '激进', hotkey: 'ALT+A', icon: '⚔️' },
+            { stance: UnitStance.GUARD, label: '防御', hotkey: 'ALT+G', icon: '🛡️' },
+            { stance: UnitStance.PASSIVE, label: '被动', hotkey: 'ALT+P', icon: '🕊️' },
           ] as const).map(({ stance, label, hotkey, icon }) => {
             const currentStance = unit.stance || UnitStance.GUARD;
             const isActive = currentStance === stance;
@@ -1222,7 +1336,7 @@ export const GameUI: React.FC = () => {
     if (!unitResponse || isObserverMode) return null;
 
     return (
-      <div className="unit-response" key={Date.now()}>
+      <div className="unit-response" key="unit-response">
         {unitResponse}
       </div>
     );
@@ -1270,6 +1384,9 @@ export const GameUI: React.FC = () => {
         <div className="pending-command-indicator">
           {pendingCommand === 'attackMove' ? '⚔️ 攻击移动 - 右键点击目标位置' :
            pendingCommand === 'patrol' ? '🔄 巡逻 - 右键点击路径点 (Shift+右键追加)' :
+           pendingCommand === 'capture' ? '🏴 占领 - 右键点击敌方/中立建筑' :
+           pendingCommand === 'harvest' ? '⛏️ 采集 - 右键点击资源点' :
+           pendingCommand === 'rally' ? '📍 集结点 - 右键点击地图设置集结点' :
            pendingCommand === 'superweapon_nuke' ? '☢️ 核弹攻击 - 右键点击目标位置' :
            pendingCommand === 'superweapon_ironcurtain' ? '🛡️ 铁幕护盾 - 右键点击目标位置' :
            pendingCommand === 'superweapon_chronosphere' ? '🌀 超时空传送 - 右键点击源位置' :

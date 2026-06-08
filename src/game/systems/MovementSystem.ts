@@ -3,6 +3,7 @@ import { UnitState, UnitType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { mapManager } from '../map/MapManager';
 import { useGameStore } from '../../store/gameStore';
+import { PathfindingManager } from './PathfindingManager';
 
 function getDirectionFromDelta(dx: number, dy: number): number {
   return Math.atan2(dy, dx);
@@ -14,6 +15,46 @@ export class MovementSystem {
   private readonly MIN_SEPARATION = 20;
   private readonly TARGET_DISPERSE_RADIUS = 10;
   private readonly FORMATION_SPACING = 30;
+  private pathfindingManager: PathfindingManager | null = null;
+  private cachedWeatherModifier: number = 1;
+  // Stuck detection: track last positions and timestamps
+  private stuckCheckPositions: Map<string, { x: number; y: number; time: number }> = new Map();
+  private static readonly STUCK_CHECK_INTERVAL = 2; // seconds
+  private static readonly STUCK_THRESHOLD = 5; // pixels - if moved less than this, consider stuck
+
+  /** Set the pathfinding manager for A* pathfinding. Call during game initialization. */
+  setPathfindingManager(pm: PathfindingManager): void {
+    this.pathfindingManager = pm;
+  }
+
+  getPathfindingManager(): PathfindingManager | null {
+    return this.pathfindingManager;
+  }
+
+  /**
+   * Request a path from the unit's current position to the target.
+   * If pathfinding is available, uses A*; otherwise falls back to direct waypoints.
+   */
+  requestPath(unit: Unit, targetX: number, targetY: number): void {
+    if (!this.pathfindingManager) return;
+
+    const result = this.pathfindingManager.findPath(
+      unit.position.x, unit.position.y,
+      targetX, targetY,
+      1,
+      !!unit.isAirborne,
+      !!unit.isNaval,
+      unit.id
+    );
+
+    if (result.success && result.path.length > 1) {
+      // Replace waypoints with A* path (skip first node = current position)
+      unit.waypoints = result.path.slice(1);
+    } else {
+      // Fallback: direct move to target
+      unit.waypoints = [{ x: targetX, y: targetY }];
+    }
+  }
 
   update(unit: Unit, deltaTime: number): void {
     // Skip units inside a transport
@@ -33,6 +74,7 @@ export class MovementSystem {
   }
 
   updateAll(units: Unit[], deltaTime: number): void {
+    this.cachedWeatherModifier = useGameStore.getState().weatherSpeedModifier;
     for (const unit of units) {
       this.updateWithAvoidance(unit, units, deltaTime);
     }
@@ -42,12 +84,49 @@ export class MovementSystem {
     if (unit.transportId) return;
     if (unit.type === UnitType.CHRONO && (unit.isChronoShifting || unit.isChronoCooldown)) return;
 
+    // Stuck detection: if unit hasn't moved significantly, clear its path
+    if (unit.state === UnitState.MOVING || unit.state === UnitState.ATTACKING) {
+      const gameTime = useGameStore.getState().gameTime;
+      const lastCheck = this.stuckCheckPositions.get(unit.id);
+      if (!lastCheck) {
+        this.stuckCheckPositions.set(unit.id, { x: unit.position.x, y: unit.position.y, time: gameTime });
+      } else if (gameTime - lastCheck.time >= MovementSystem.STUCK_CHECK_INTERVAL) {
+        const dx = unit.position.x - lastCheck.x;
+        const dy = unit.position.y - lastCheck.y;
+        const moved = Math.sqrt(dx * dx + dy * dy);
+        if (moved < MovementSystem.STUCK_THRESHOLD && unit.waypoints.length > 0) {
+          // Unit is stuck - clear waypoints and let AI reassign
+          unit.waypoints = [];
+          if (unit.isAttackMoving) {
+            unit.state = UnitState.GUARDING;
+            unit.isAttackMoving = false;
+          } else if (unit.state === UnitState.MOVING) {
+            unit.state = UnitState.IDLE;
+          }
+        }
+        this.stuckCheckPositions.set(unit.id, { x: unit.position.x, y: unit.position.y, time: gameTime });
+      }
+    }
+
     switch (unit.state) {
       case UnitState.MOVING:
         this.updateMovingWithAvoidance(unit, allUnits, deltaTime);
         break;
       case UnitState.PATROLLING:
         this.updatePatrollingWithAvoidance(unit, allUnits, deltaTime);
+        break;
+      case UnitState.ATTACKING:
+        // Attackers chasing targets use waypoints set by CombatUpdateSystem
+        if (unit.waypoints.length > 0) {
+          this.updateMovingWithAvoidance(unit, allUnits, deltaTime);
+        }
+        break;
+      case UnitState.HARVESTING:
+      case UnitState.RETURNING:
+        // Harvesters use waypoints set by HarvestSystem, move along them
+        if (unit.waypoints.length > 0) {
+          this.updateMovingWithAvoidance(unit, allUnits, deltaTime);
+        }
         break;
     }
   }
@@ -110,15 +189,18 @@ export class MovementSystem {
         unit.position = { ...target };
         unit.waypoints.shift();
         if (unit.waypoints.length === 0) {
-          if (unit.isAttackMoving) {
-            unit.state = UnitState.GUARDING;
-            unit.isAttackMoving = false;
-          } else {
-            unit.state = UnitState.IDLE;
+          // Don't change state for HARVESTING/RETURNING/ATTACKING - managed by other systems
+          if (unit.state !== UnitState.HARVESTING && unit.state !== UnitState.RETURNING && unit.state !== UnitState.ATTACKING) {
+            if (unit.isAttackMoving) {
+              unit.state = UnitState.GUARDING;
+              unit.isAttackMoving = false;
+            } else {
+              unit.state = UnitState.IDLE;
+            }
           }
         }
       } else {
-        const weatherSpeedModifier = useGameStore.getState().weatherSpeedModifier;
+        const weatherSpeedModifier = this.cachedWeatherModifier;
         const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime * weatherSpeedModifier;
         const movementCost = mapManager.getMovementCostAtPosition(unit.position.x, unit.position.y);
         const costFactor = movementCost > 0 ? 1 / movementCost : 1;
@@ -190,7 +272,7 @@ export class MovementSystem {
       if (dist < 5) {
         unit.waypoints.push(unit.waypoints.shift()!);
       } else {
-        const weatherSpeedModifier = useGameStore.getState().weatherSpeedModifier;
+        const weatherSpeedModifier = this.cachedWeatherModifier;
         const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime * weatherSpeedModifier;
         const ratio = Math.min(1, moveSpeed / dist);
         let newX = unit.position.x + dx * ratio;
@@ -238,7 +320,7 @@ export class MovementSystem {
           }
         }
       } else {
-        const weatherSpeedModifier = useGameStore.getState().weatherSpeedModifier;
+        const weatherSpeedModifier = this.cachedWeatherModifier;
         const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime * weatherSpeedModifier;
         const movementCost = mapManager.getMovementCostAtPosition(unit.position.x, unit.position.y);
         const costFactor = movementCost > 0 ? 1 / movementCost : 1;
@@ -291,7 +373,7 @@ export class MovementSystem {
       if (dist < 5) {
         unit.waypoints.push(unit.waypoints.shift()!);
       } else {
-        const weatherSpeedModifier = useGameStore.getState().weatherSpeedModifier;
+        const weatherSpeedModifier = this.cachedWeatherModifier;
         const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime * weatherSpeedModifier;
         const ratio = Math.min(1, moveSpeed / dist);
         const newX = unit.position.x + dx * ratio;
@@ -313,5 +395,14 @@ export class MovementSystem {
     } else {
       unit.state = UnitState.IDLE;
     }
+  }
+
+  removeUnit(unitId: string): void {
+    this.stuckCheckPositions.delete(unitId);
+  }
+
+  reset(): void {
+    this.stuckCheckPositions.clear();
+    this.cachedWeatherModifier = 1;
   }
 }

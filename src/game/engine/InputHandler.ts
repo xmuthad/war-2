@@ -10,7 +10,7 @@ const INFANTRY_TYPES = new Set([
   UnitType.TERRORIST, UnitType.IVAN, UnitType.ENGINEER, UnitType.CHRONO,
 ]);
 
-export type PendingCommand = null | 'attackMove' | 'patrol' | 'superweapon_nuke' | 'superweapon_ironcurtain' | 'superweapon_chronosphere' | 'superweapon_chronosphere_target';
+export type PendingCommand = null | 'attackMove' | 'patrol' | 'capture' | 'harvest' | 'rally' | 'superweapon_nuke' | 'superweapon_ironcurtain' | 'superweapon_chronosphere' | 'superweapon_chronosphere_target';
 
 export class InputHandler {
   private pendingCommand: PendingCommand = null;
@@ -221,22 +221,6 @@ export class InputHandler {
       return;
     }
 
-    // Attack-move command (A key)
-    if (key === 'a' || key === 'A') {
-      if (store.selectedUnits.length > 0) {
-        this.pendingCommand = 'attackMove';
-      }
-      return;
-    }
-
-    // Patrol command (P key)
-    if (key === 'p' || key === 'P') {
-      if (store.selectedUnits.length > 0) {
-        this.pendingCommand = 'patrol';
-      }
-      return;
-    }
-
     // Unload transport (U key)
     if (key === 'u' || key === 'U') {
       for (const unit of store.selectedUnits) {
@@ -247,9 +231,30 @@ export class InputHandler {
       return;
     }
 
-    // Gather command (G key) - move all selected units to first unit's position
-    if (key === 'g' || key === 'G') {
-      this.gatherUnits();
+    // Load into transport (T key)
+    if (key === 't' || key === 'T') {
+      const { currentPlayer, selectedUnits } = store;
+      if (currentPlayer && selectedUnits.length > 0) {
+        for (const unit of selectedUnits) {
+          if (INFANTRY_TYPES.has(unit.type) && !unit.transportId) {
+            const transport = currentPlayer.units.find(t =>
+              t.maxPassengers && t.passengers &&
+              t.passengers.length < (t.maxPassengers || 0) &&
+              !t.transportId &&
+              Math.sqrt((t.position.x - unit.position.x) ** 2 + (t.position.y - unit.position.y) ** 2) < 3 * GAME_CONFIG.TILE_SIZE
+            );
+            if (transport) store.loadIntoTransport(unit.id, transport.id);
+          }
+        }
+      }
+      return;
+    }
+
+    // Capture command (C key for engineers)
+    if (key === 'c' || key === 'C') {
+      if (store.selectedUnits.some(u => u.data.canCapture)) {
+        this.pendingCommand = 'capture';
+      }
       return;
     }
 
@@ -493,6 +498,25 @@ export class InputHandler {
     if (this.pendingCommand === 'attackMove') {
       const unitIds = selectedUnits.map(u => u.id);
       store.attackMoveUnitsToTarget(unitIds, { x: worldX, y: worldY });
+    } else if (this.pendingCommand === 'capture') {
+      // Move engineers to the clicked position (CaptureSystem will auto-capture when in range)
+      for (const unit of selectedUnits) {
+        if (unit.data.canCapture) {
+          store.moveUnit(unit.id, { x: worldX, y: worldY });
+        }
+      }
+    } else if (this.pendingCommand === 'harvest') {
+      // Move harvester to clicked position (HarvestSystem will auto-harvest when near resource)
+      for (const unit of selectedUnits) {
+        if (unit.data.canHarvest) {
+          store.moveUnit(unit.id, { x: worldX, y: worldY });
+        }
+      }
+    } else if (this.pendingCommand === 'rally') {
+      // Set rally point for selected building
+      if (selectedBuilding) {
+        store.setRallyPoint(selectedBuilding.id, { x: worldX, y: worldY });
+      }
     } else if (this.pendingCommand === 'patrol') {
       if (selectedUnits.length > 1) {
         // Formation-based patrol for multiple units

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { gameEventBus } from './GameEventBus';
 
 /**
  * Categories of sounds in the game
@@ -87,6 +88,7 @@ export const SOUND_EFFECTS: Record<string, SoundEffect> = {
   resourceDepleted: { key: 'click', category: 'ui', volume: 0.5 },
   chronoShift: { key: 'teleport', category: 'combat', volume: 0.6 },
   buildingDestroyed: { key: 'building_destroyed', category: 'combat', volume: 0.6 },
+  buildingHit: { key: 'building_hit', category: 'combat', volume: 0.5 },
   superweaponCharging: { key: 'superweapon_charging', category: 'combat', volume: 0.7 },
   superweaponLaunch: { key: 'superweapon_launch', category: 'combat', volume: 0.8 },
   unitProduced: { key: 'unit_produced', category: 'building', volume: 0.4 },
@@ -131,6 +133,7 @@ export class GameSoundManager {
   private cameraPosition: { x: number; y: number } = { x: 0, y: 0 };
   private readonly SOUND_FALLOFF_RADIUS = 800; // 音效衰减半径（像素）
   private readonly SOUND_MIN_VOLUME = 0.1; // 最小音量
+  private volumeChangedUnsub?: () => void;
 
   /**
    * Creates a new GameSoundManager instance
@@ -142,6 +145,27 @@ export class GameSoundManager {
     this.config = { ...SOUND_CONFIG, ...config };
 
     this.initializeCategoryVolumes();
+    this.listenForSettingsChanges();
+  }
+
+  /** Listen for volume change events from settings panel */
+  private listenForSettingsChanges(): void {
+    this.volumeChangedUnsub = gameEventBus.on('settings:volumeChanged', (event) => {
+      const data = event.data as { master?: number; music?: number; sfx?: number } | undefined;
+      if (!data) return;
+      if (data.master !== undefined) {
+        this.setMasterVolume(data.master);
+      }
+      if (data.music !== undefined) {
+        this.categoryVolumes.set('ambient', data.music);
+      }
+      if (data.sfx !== undefined) {
+        this.categoryVolumes.set('combat', data.sfx);
+        this.categoryVolumes.set('movement', data.sfx);
+        this.categoryVolumes.set('building', data.sfx);
+        this.categoryVolumes.set('ui', data.sfx);
+      }
+    });
   }
 
   /**
@@ -274,6 +298,11 @@ export class GameSoundManager {
       return;
     }
 
+    // Destroy old sound object before creating new one
+    if (sound) {
+      sound.destroy();
+    }
+
     sound = this.scene.sound.add(voice.key, {
       volume: this.categoryVolumes.get('voice')! * this.config.volume
     });
@@ -312,6 +341,7 @@ export class GameSoundManager {
           volume: 0,
           duration: fadeDuration / 2,
           onComplete: () => {
+            if (!this.scene?.scene?.isActive()) return;
             this.currentMusic?.stop();
             this.currentMusic = null;
             this.startMusic(musicKey, fadeDuration / 2);
@@ -365,6 +395,7 @@ export class GameSoundManager {
         volume: 0,
         duration: fadeDuration,
         onComplete: () => {
+          if (!this.scene?.scene?.isActive()) return;
           this.currentMusic?.stop();
           this.currentMusic = null;
         }
@@ -510,6 +541,7 @@ export class GameSoundManager {
         volume: 0,
         duration: fadeDuration,
         onComplete: () => {
+          if (!this.scene?.scene?.isActive()) return;
           this.stopAll(0);
         }
       });
@@ -535,6 +567,9 @@ export class GameSoundManager {
    * Cleans up resources used by this manager
    */
   dispose(): void {
+    this.volumeChangedUnsub?.();
+    this.volumeChangedUnsub = undefined;
+
     this.stopAll();
 
     this.sounds.forEach(sound => sound.destroy());

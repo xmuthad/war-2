@@ -1,4 +1,4 @@
-import { Player, Unit, UnitState, GameMapData, UpgradeType } from '../../types';
+import { Player, Unit, UnitState, GameMapData, UpgradeType, Building, BuildingType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { gameEventBus } from './GameEventBus';
 
@@ -18,6 +18,15 @@ export class AutoHarvestSystem {
 
     if (idleMiners.length === 0) return;
 
+    // Track already-assigned resource IDs to distribute harvesters across different nodes
+    const assignedResourceIds = new Set<string>();
+    // Include resources already targeted by non-idle harvesters
+    for (const u of player.units) {
+      if (u.data.canHarvest && u.state !== UnitState.IDLE && u.target) {
+        assignedResourceIds.add(u.target);
+      }
+    }
+
     for (const unit of idleMiners) {
       // If cargo is full, find nearest refinery and return
       if ((unit.cargo ?? 0) >= GAME_CONFIG.CARGO_CAPACITY) {
@@ -29,11 +38,12 @@ export class AutoHarvestSystem {
         }
       }
 
-      // Find nearest resource node
-      const nearestResource = this.findNearestResource(unit.position, map);
+      // Find nearest unassigned resource node
+      const nearestResource = this.findNearestResource(unit.position, map, assignedResourceIds);
       if (nearestResource) {
         unit.state = UnitState.HARVESTING;
         unit.target = nearestResource.id;
+        assignedResourceIds.add(nearestResource.id);
       }
     }
 
@@ -81,34 +91,36 @@ export class AutoHarvestSystem {
     }
   }
 
-  private findNearestRefinery(pos: { x: number; y: number }, player: Player): Unit | null {
+  private findNearestRefinery(pos: { x: number; y: number }, player: Player): Building | null {
     const refineries = player.buildings.filter(b =>
-      b.type === 'refinery' && b.isConstructed
+      b.type === BuildingType.REFINERY && b.isConstructed
     );
     if (refineries.length === 0) return null;
 
-    let nearest: Unit | null = null;
+    let nearest: Building | null = null;
     let nearestDist = Infinity;
     for (const r of refineries) {
       const dist = getDistance(pos, r.position);
       if (dist < nearestDist) {
         nearestDist = dist;
-        nearest = { id: r.id, position: r.position } as Unit;
+        nearest = r;
       }
     }
     return nearest;
   }
 
-  private findNearestResource(pos: { x: number; y: number }, map: GameMapData): { id: string } | null {
+  private findNearestResource(pos: { x: number; y: number }, map: GameMapData, excludeIds?: Set<string>): { id: string } | null {
     if (!map.resourceNodes || map.resourceNodes.length === 0) return null;
 
     let nearest: { id: string } | null = null;
     let nearestDist = Infinity;
     for (const r of map.resourceNodes) {
+      if (r.amount <= 0) continue;
+      if (excludeIds && excludeIds.has(r.id)) continue;
       const worldX = r.position.x * GAME_CONFIG.TILE_SIZE;
       const worldY = r.position.y * GAME_CONFIG.TILE_SIZE;
       const dist = getDistance(pos, { x: worldX, y: worldY });
-      if (dist < nearestDist && r.amount > 0) {
+      if (dist < nearestDist) {
         nearestDist = dist;
         nearest = { id: r.id };
       }

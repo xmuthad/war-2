@@ -130,7 +130,7 @@ export class PhaserRadarAlertUIRenderer implements RadarAlertUIRenderer {
       alpha: 0,
       duration: duration,
       ease: 'Power2',
-      onComplete: () => ping.destroy()
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; ping.destroy(); }
     });
   }
 
@@ -225,6 +225,7 @@ export class PhaserRadarAlertUIRenderer implements RadarAlertUIRenderer {
         duration: 200,
         ease: 'Back.easeIn',
         onComplete: () => {
+          if (!this.scene?.scene?.isActive()) return;
           container.destroy();
           this.activeAlertCount = Math.max(0, this.activeAlertCount - 1);
         }

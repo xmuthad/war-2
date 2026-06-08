@@ -7,6 +7,7 @@ export interface TerroristExplosion {
   radius: number;
   damage: number;
   faction: Faction;
+  teamId?: number;
 }
 
 export enum DamageType {

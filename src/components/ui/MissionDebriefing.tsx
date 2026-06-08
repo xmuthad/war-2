@@ -48,6 +48,8 @@ export const MissionDebriefing: React.FC<MissionDebriefingProps> = ({
   useEffect(() => {
     const duration = 1500;
     const startTime = Date.now();
+    let frameId: number;
+    let rewardTimer: number;
 
     const animate = () => {
       const elapsed = Date.now() - startTime;
@@ -66,13 +68,17 @@ export const MissionDebriefing: React.FC<MissionDebriefingProps> = ({
       });
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        frameId = requestAnimationFrame(animate);
       } else if (result === 'victory') {
-        setTimeout(() => setShowRewards(true), 300);
+        rewardTimer = window.setTimeout(() => setShowRewards(true), 300);
       }
     };
 
-    requestAnimationFrame(animate);
+    frameId = requestAnimationFrame(animate);
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(rewardTimer);
+    };
   }, [stats, result]);
 
   const getRatingStars = (rating: number): string => {

@@ -7,12 +7,30 @@ import { gameEventBus } from '../../game/systems/GameEventBus';
 import './BuildPanel.css';
 
 type TabType = 'buildings' | 'units' | 'tech';
+type BuildingCategory = 'all' | 'economy' | 'production' | 'defense' | 'tech' | 'superweapon';
+
+const BUILDING_CATEGORIES: Record<BuildingCategory, { label: string; types: BuildingType[] }> = {
+  all: { label: '全部', types: [] },
+  economy: { label: '经济', types: [BuildingType.REFINERY, BuildingType.POWER, BuildingType.REPAIR] },
+  production: { label: '生产', types: [BuildingType.BARRACKS, BuildingType.WARFACTORY, BuildingType.HELIPAD, BuildingType.NAVAL_SHIPYARD, BuildingType.AIRFIELD] },
+  defense: { label: '防御', types: [BuildingType.TURRET, BuildingType.TESLA_COIL, BuildingType.WALL, BuildingType.DEFENSE, BuildingType.FLAME_TOWER] },
+  tech: { label: '科技', types: [BuildingType.RADAR, BuildingType.TECH] },
+  superweapon: { label: '超武', types: [BuildingType.NUCLEAR_SILO, BuildingType.CHRONOSPHERE, BuildingType.IRON_CURTAIN] },
+};
 
 export const BuildPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('buildings');
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [flashItem, setFlashItem] = useState<string | null>(null);
-  const { currentPlayer, selectedBuilding, produceUnit, placementBuildingType, startBuildingPlacement, cancelBuildingPlacement, researchUpgrade, cancelProduction } = useGameStore();
+  const [buildingCategory, setBuildingCategory] = useState<BuildingCategory>('all');
+  const currentPlayer = useGameStore(s => s.currentPlayer);
+  const selectedBuilding = useGameStore(s => s.selectedBuilding);
+  const placementBuildingType = useGameStore(s => s.placementBuildingType);
+  const produceUnit = useGameStore(s => s.produceUnit);
+  const startBuildingPlacement = useGameStore(s => s.startBuildingPlacement);
+  const cancelBuildingPlacement = useGameStore(s => s.cancelBuildingPlacement);
+  const researchUpgrade = useGameStore(s => s.researchUpgrade);
+  const cancelProduction = useGameStore(s => s.cancelProduction);
 
   // Tab hotkeys: 1/2/3 switch tabs only when no units are selected (to avoid conflict with control groups)
   useEffect(() => {
@@ -113,11 +131,30 @@ export const BuildPanel: React.FC = () => {
     return lines.join('\n');
   };
 
-  const renderBuildingTab = () => (
-    <div className="build-grid">
-      {Object.entries(buildings)
-        .filter(([type]) => type !== BuildingType.COMMAND)
-        .map(([type, data]) => {
+  const renderBuildingTab = () => {
+    const filteredBuildings = buildingCategory === 'all'
+      ? Object.entries(buildings)
+      : Object.entries(buildings).filter(([type]) =>
+          BUILDING_CATEGORIES[buildingCategory].types.includes(type as BuildingType)
+        );
+
+    return (
+      <>
+        <div className="build-category-bar">
+          {(Object.entries(BUILDING_CATEGORIES) as [BuildingCategory, { label: string }][]).map(([cat, { label }]) => (
+            <button
+              key={cat}
+              className={`category-btn ${buildingCategory === cat ? 'active' : ''}`}
+              onClick={() => setBuildingCategory(cat)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="build-grid">
+          {filteredBuildings
+            .filter(([type]) => type !== BuildingType.COMMAND)
+            .map(([type, data]) => {
           const canBuild = canBuildBuilding(type as BuildingType);
           const isHovered = hoveredItem === type;
 
@@ -168,7 +205,9 @@ export const BuildPanel: React.FC = () => {
           );
         })}
     </div>
+    </>
   );
+  };
 
   const renderUnitTab = () => {
     // Check if selected building can produce anything

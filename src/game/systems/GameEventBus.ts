@@ -2,17 +2,13 @@ export type GameEventType =
   | 'unit:attack'
   | 'unit:destroyed'
   | 'unit:move'
-  | 'unit:select'
   | 'unit:produced'
-  | 'unit:levelUp'
   | 'unit:promoted'
   | 'unit:teleport'
   | 'ui:notification'
   | 'building:constructed'
   | 'building:destroyed'
   | 'building:damaged'
-  | 'building:repair'
-  | 'building:producing'
   | 'resource:collected'
   | 'resource:deposited'
   | 'resource:depleted'
@@ -32,12 +28,15 @@ export type GameEventType =
   | 'upgrade:started'
   | 'transport:load'
   | 'transport:unload'
-  | 'unit:teleport'
   | 'superweapon:activated'
+  | 'superweapon:charging'
+  | 'superweapon:launch'
   | 'pathfinding:obstaclesChanged'
   | 'map:ping'
+  | 'map:reveal'
   | 'camera:centerOn'
-  | 'sound:play';
+  | 'sound:play'
+  | 'settings:volumeChanged';
 
 export interface GameEvent {
   type: GameEventType;
@@ -49,6 +48,7 @@ export type GameEventHandler = (event: GameEvent) => void;
 
 class GameEventBus {
   private handlers: Map<GameEventType, Set<GameEventHandler>> = new Map();
+  private anyHandlers: Set<GameEventHandler> = new Set();
   private eventQueue: GameEvent[] = [];
   private maxQueueSize = 200;
 
@@ -64,22 +64,10 @@ class GameEventBus {
   }
 
   onAny(handler: GameEventHandler): () => void {
-    const unsubscribers: (() => void)[] = [];
-    const eventTypes: GameEventType[] = [
-      'unit:attack', 'unit:destroyed', 'unit:move', 'unit:select', 'unit:produced', 'unit:levelUp', 'unit:promoted', 'unit:teleport', 'ui:notification',
-      'building:constructed', 'building:destroyed', 'building:damaged', 'building:repair', 'building:producing',
-      'resource:collected', 'resource:deposited', 'resource:depleted',
-      'combat:hit', 'combat:explosion', 'combat:emp', 'combat:projectile',
-      'game:victory', 'game:defeat', 'game:alert',
-      'alert:lowPower', 'alert:baseUnderAttack',
-      'power:low', 'power:restored', 'terrain:tilesChanged',
-      'upgrade:completed', 'upgrade:started', 'transport:load', 'transport:unload',
-      'superweapon:activated', 'pathfinding:obstaclesChanged', 'sound:play',
-    ];
-    for (const type of eventTypes) {
-      unsubscribers.push(this.on(type, handler));
-    }
-    return () => unsubscribers.forEach(unsub => unsub());
+    this.anyHandlers.add(handler);
+    return () => {
+      this.anyHandlers.delete(handler);
+    };
   }
 
   emit(eventType: GameEventType, data?: Record<string, unknown>): void {
@@ -102,6 +90,15 @@ class GameEventBus {
         } catch (error) {
           console.error(`Error in event handler for ${eventType}:`, error);
         }
+      }
+    }
+
+    // Notify onAny subscribers
+    for (const handler of this.anyHandlers) {
+      try {
+        handler(event);
+      } catch (error) {
+        console.error(`Error in onAny handler for ${eventType}:`, error);
       }
     }
   }

@@ -114,14 +114,14 @@ export class MissionSystem {
         id: `obj_${index}`,
         status: 'active',
         progress: 0,
-        startTime: Date.now()
+        startTime: this.missionTimer
       };
       objectives.set(objective.id, objective);
     });
 
     this.currentMission = {
       missionId: config.id,
-      startTime: Date.now(),
+      startTime: this.missionTimer,
       status: 'active',
       objectives,
       totalObjectives: objectives.size,
@@ -166,7 +166,7 @@ export class MissionSystem {
     if (!objective || objective.status !== 'active') return;
 
     objective.status = 'completed';
-    objective.completedTime = Date.now();
+    objective.completedTime = this.missionTimer;
     this.currentMission.completedObjectives++;
 
     objective.onComplete?.();
@@ -228,7 +228,7 @@ export class MissionSystem {
     if (!this.currentMission) return;
 
     this.currentMission.status = success ? 'completed' : 'failed';
-    this.currentMission.endTime = Date.now();
+    this.currentMission.endTime = this.missionTimer;
 
     if (this.missionConfig?.rewards && success) {
       this.grantRewards(this.missionConfig.rewards);
@@ -255,7 +255,7 @@ export class MissionSystem {
     if (!this.currentMission) return;
 
     this.currentMission.status = 'abandoned';
-    this.currentMission.endTime = Date.now();
+    this.currentMission.endTime = this.missionTimer;
     this.notifyMissionComplete(false);
   }
 
@@ -273,7 +273,7 @@ export class MissionSystem {
 
     this.currentMission.objectives.forEach(objective => {
       if (objective.status === 'active' && objective.timeLimit) {
-        const elapsed = Date.now() - objective.startTime;
+        const elapsed = this.missionTimer - objective.startTime;
         if (elapsed >= objective.timeLimit) {
           this.failObjective(objective.id);
         }

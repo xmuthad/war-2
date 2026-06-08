@@ -68,7 +68,6 @@ export class FogOfWar {
     }
 
     this.isDirty = true;
-    console.log('FogOfWar initialized');
   }
 
   getObserverCount(): number {
@@ -151,7 +150,7 @@ export class FogOfWar {
     });
   }
 
-  private revealArea(centerX: number, centerY: number, radius: number): void {
+  public revealArea(centerX: number, centerY: number, radius: number): void {
     const minX = Math.max(0, Math.floor(centerX - radius));
     const maxX = Math.min(this.mapWidth - 1, Math.ceil(centerX + radius));
     const minY = Math.max(0, Math.floor(centerY - radius));

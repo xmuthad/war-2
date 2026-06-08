@@ -161,7 +161,7 @@ export class IndicatorSystem {
       targets: indicator,
       alpha: 0,
       duration: 300,
-      onComplete: () => indicator.destroy()
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; indicator.destroy(); }
     });
 
     return indicator;
@@ -201,7 +201,7 @@ export class IndicatorSystem {
       scaleY: 2,
       alpha: 0,
       duration,
-      onComplete: () => flash.destroy()
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; flash.destroy(); }
     });
   }
 

@@ -115,12 +115,26 @@ export const EFFECT_CONFIG: EffectConfig = {
   }
 };
 
-const MAX_ACTIVE_EFFECTS = 20;
+const MAX_ACTIVE_EFFECTS = 80;
+
+// Effect priority: higher = less likely to be culled
+const EFFECT_PRIORITY: Record<string, number> = {
+  explosion: 10,
+  buildingRubble: 9,
+  smoke: 5,
+  muzzleFlash: 3,
+  buildEffect: 4,
+  healEffect: 3,
+  teslaZap: 6,
+  chronoShift: 7,
+  unitDeath: 8,
+};
 
 export class EffectSystem {
   private scene: Phaser.Scene;
   private effects: Map<string, Phaser.GameObjects.GameObject> = new Map();
   private effectCreationTimes: Map<string, number> = new Map();
+  private effectTimers: Map<string, Phaser.Time.TimerEvent> = new Map();
   private effectIdCounter: number = 0;
   private projectileGraphics: Phaser.GameObjects.Graphics | null = null;
 
@@ -129,16 +143,22 @@ export class EffectSystem {
   }
 
   private removeOldestEffect(): void {
-    let oldestId: string | null = null;
-    let oldestTime = Infinity;
+    let bestCandidate: string | null = null;
+    let bestScore = Infinity; // lower score = more likely to be removed
+
     this.effectCreationTimes.forEach((time, id) => {
-      if (time < oldestTime) {
-        oldestTime = time;
-        oldestId = id;
+      // Extract effect type from id (e.g., "explosion_5" -> "explosion")
+      const type = id.split('_')[0];
+      const priority = EFFECT_PRIORITY[type] || 1;
+      // Score = time / priority: older and lower priority = lower score = removed first
+      const score = time / priority;
+      if (score < bestScore) {
+        bestScore = score;
+        bestCandidate = id;
       }
     });
-    if (oldestId !== null) {
-      this.stopEffect(oldestId);
+    if (bestCandidate !== null) {
+      this.stopEffect(bestCandidate);
     }
   }
 
@@ -212,11 +232,13 @@ export class EffectSystem {
     this.effects.set(id, container);
     this.effectCreationTimes.set(id, this.scene.time.now);
 
-    this.scene.time.delayedCall(config.duration, () => {
+    const timer = this.scene.time.delayedCall(config.duration, () => {
       container.destroy();
       this.effects.delete(id);
       this.effectCreationTimes.delete(id);
+      this.effectTimers.delete(id);
     });
+    this.effectTimers.set(id, timer);
 
     return id;
   }
@@ -288,6 +310,8 @@ export class EffectSystem {
 
     const impact = this.scene.add.circle(endX, endY, 5, config.color, 0.8);
     impact.setDepth(701);
+    this.effects.set(`${id}_impact`, impact);
+    this.effectCreationTimes.set(`${id}_impact`, this.scene.time.now);
     this.scene.tweens.add({
       targets: impact,
       scale: 2,
@@ -297,6 +321,8 @@ export class EffectSystem {
       onComplete: () => {
         if (!this.scene || !this.scene.scene.isActive()) return;
         impact.destroy();
+        this.effects.delete(`${id}_impact`);
+        this.effectCreationTimes.delete(`${id}_impact`);
       }
     });
 
@@ -353,6 +379,7 @@ export class EffectSystem {
         drawZap();
         if (this.scene.time.now - startTime >= config.duration) {
           flashInterval.destroy();
+          this.effectTimers.delete(id);
           graphics.destroy();
           this.effects.delete(id);
           this.effectCreationTimes.delete(id);
@@ -360,6 +387,7 @@ export class EffectSystem {
       },
       loop: true
     });
+    this.effectTimers.set(id, flashInterval);
 
     return id;
   }
@@ -411,11 +439,13 @@ export class EffectSystem {
     this.effects.set(id, container);
     this.effectCreationTimes.set(id, this.scene.time.now);
 
-    this.scene.time.delayedCall(config.duration, () => {
+    const timer1 = this.scene.time.delayedCall(config.duration, () => {
       container.destroy();
       this.effects.delete(id);
       this.effectCreationTimes.delete(id);
+      this.effectTimers.delete(id);
     });
+    this.effectTimers.set(id, timer1);
 
     return id;
   }
@@ -457,11 +487,13 @@ export class EffectSystem {
     this.effects.set(id, container);
     this.effectCreationTimes.set(id, this.scene.time.now);
 
-    this.scene.time.delayedCall(config.duration, () => {
+    const timer2 = this.scene.time.delayedCall(config.duration, () => {
       container.destroy();
       this.effects.delete(id);
       this.effectCreationTimes.delete(id);
+      this.effectTimers.delete(id);
     });
+    this.effectTimers.set(id, timer2);
 
     return id;
   }
@@ -517,11 +549,13 @@ export class EffectSystem {
     this.effects.set(id, container);
     this.effectCreationTimes.set(id, this.scene.time.now);
 
-    this.scene.time.delayedCall(config.duration + config.particleCount * 40, () => {
+    const timer3 = this.scene.time.delayedCall(config.duration + config.particleCount * 40, () => {
       container.destroy();
       this.effects.delete(id);
       this.effectCreationTimes.delete(id);
+      this.effectTimers.delete(id);
     });
+    this.effectTimers.set(id, timer3);
 
     return id;
   }
@@ -619,11 +653,13 @@ export class EffectSystem {
 
     this.effects.set(id, container);
     this.effectCreationTimes.set(id, this.scene.time.now);
-    this.scene.time.delayedCall(800, () => {
+    const timer4 = this.scene.time.delayedCall(800, () => {
       container.destroy();
       this.effects.delete(id);
       this.effectCreationTimes.delete(id);
+      this.effectTimers.delete(id);
     });
+    this.effectTimers.set(id, timer4);
     return id;
   }
 
@@ -651,6 +687,64 @@ export class EffectSystem {
       delay: 25000,
       duration: 5000,
       onComplete: () => {
+        if (!this.scene?.scene?.isActive()) return;
+        container.destroy();
+        this.effects.delete(id);
+        this.effectCreationTimes.delete(id);
+      }
+    });
+
+    this.effects.set(id, container);
+    this.effectCreationTimes.set(id, this.scene.time.now);
+    return id;
+  }
+
+  playVehicleWreckage(x: number, y: number): string {
+    this.enforceEffectLimit();
+    const id = `wreckage_${this.effectIdCounter++}`;
+    const container = this.scene.add.container(x, y);
+    container.setDepth(2);
+
+    // Main hull piece (dark gray, larger)
+    const hull = this.scene.add.rectangle(0, 0, 12, 8, 0x444444, 0.7);
+    container.add(hull);
+
+    // Turret remnant (smaller, slightly lighter)
+    const turret = this.scene.add.rectangle(-3, -2, 6, 4, 0x555555, 0.6);
+    container.add(turret);
+
+    // Scattered debris pieces
+    for (let i = 0; i < 4; i++) {
+      const px = (Math.random() - 0.5) * 20;
+      const py = (Math.random() - 0.5) * 14;
+      const piece = this.scene.add.rectangle(
+        px, py,
+        2 + Math.random() * 3, 2 + Math.random() * 2,
+        0x3a3a3a, 0.5 + Math.random() * 0.2
+      );
+      container.add(piece);
+    }
+
+    // Small smoke wisp on top
+    const smoke = this.scene.add.circle(0, -4, 3, 0x666666, 0.3);
+    container.add(smoke);
+    this.scene.tweens.add({
+      targets: smoke,
+      y: -12,
+      alpha: 0,
+      duration: 2000,
+      ease: 'Power1',
+      onComplete: () => { if (!this.scene?.scene?.isActive()) return; smoke.destroy(); }
+    });
+
+    // Fade out wreckage after 20 seconds
+    this.scene.tweens.add({
+      targets: container,
+      alpha: 0,
+      delay: 20000,
+      duration: 3000,
+      onComplete: () => {
+        if (!this.scene?.scene?.isActive()) return;
         container.destroy();
         this.effects.delete(id);
         this.effectCreationTimes.delete(id);
@@ -698,11 +792,13 @@ export class EffectSystem {
     this.effects.set(id, container);
     this.effectCreationTimes.set(id, this.scene.time.now);
 
-    this.scene.time.delayedCall(config.duration + config.particleCount * 100, () => {
+    const timer5 = this.scene.time.delayedCall(config.duration + config.particleCount * 100, () => {
       container.destroy();
       this.effects.delete(id);
       this.effectCreationTimes.delete(id);
+      this.effectTimers.delete(id);
     });
+    this.effectTimers.set(id, timer5);
 
     return id;
   }
@@ -749,6 +845,11 @@ export class EffectSystem {
   }
 
   stopEffect(id: string): void {
+    const timer = this.effectTimers.get(id);
+    if (timer) {
+      timer.destroy();
+      this.effectTimers.delete(id);
+    }
     const effect = this.effects.get(id);
     if (effect) {
       effect.destroy();
@@ -758,6 +859,8 @@ export class EffectSystem {
   }
 
   stopAllEffects(): void {
+    this.effectTimers.forEach(timer => timer.destroy());
+    this.effectTimers.clear();
     this.effects.forEach(effect => effect.destroy());
     this.effects.clear();
     this.effectCreationTimes.clear();

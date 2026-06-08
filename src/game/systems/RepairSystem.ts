@@ -52,6 +52,9 @@ export class RepairSystem {
     );
     if (!repairBuilding) {
       unit.isRepairingAtFactory = false;
+      unit.state = UnitState.IDLE;
+      unit.target = null;
+      unit.waypoints = [];
       return;
     }
 

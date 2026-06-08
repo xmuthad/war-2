@@ -92,7 +92,14 @@ export class GameUIController {
     return GameUIController.instance;
   }
 
+  private hotkeyUnsub?: () => void;
+
   public initialize(hotkeyManager: HotkeyManager): void {
+    // Prevent duplicate initialization
+    if (this.hotkeyUnsub) {
+      this.hotkeyUnsub();
+      this.hotkeyUnsub = undefined;
+    }
     this.hotkeyManager = hotkeyManager;
     this.setupHotkeyListeners();
   }
@@ -100,7 +107,7 @@ export class GameUIController {
   private setupHotkeyListeners(): void {
     if (!this.hotkeyManager) return;
 
-    this.hotkeyManager.onHotkey((action: HotkeyAction) => {
+    this.hotkeyUnsub = this.hotkeyManager.onHotkey((action: HotkeyAction) => {
       switch (action) {
         case 'deselect':
           this.hideContextMenu();
@@ -414,6 +421,10 @@ export class GameUIController {
     if (this.tooltipTimeoutId) {
       clearTimeout(this.tooltipTimeoutId);
       this.tooltipTimeoutId = null;
+    }
+    if (this.hotkeyUnsub) {
+      this.hotkeyUnsub();
+      this.hotkeyUnsub = undefined;
     }
     this.removeContextMenuCloseHandler();
     this.reset();

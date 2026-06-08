@@ -25,7 +25,7 @@ export interface LeakDetectionConfig {
 }
 
 export const DEFAULT_LEAK_CONFIG: LeakDetectionConfig = {
-  enabled: true,
+  enabled: false,
   trackSize: true,
   maxAge: 60000,
   checkInterval: 5000,

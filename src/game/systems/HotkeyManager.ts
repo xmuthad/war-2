@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { useGameStore } from '../../store/gameStore';
 
 /**
  * Available hotkey actions in the game
@@ -232,6 +233,8 @@ export class HotkeyManager {
     });
   }
 
+  private static readonly PAUSED_ALLOWED_ACTIONS = new Set(['pause', 'deselect', 'selectAll', 'toggleSettings', 'toggleShortcuts']);
+
   /**
    * Handles key down events
    * @param key - The key that was pressed
@@ -244,6 +247,14 @@ export class HotkeyManager {
     const modifiers = this.getActiveModifiers();
     const bindingKey = this.getBindingKey(key, modifiers);
     const binding = this.bindings.get(bindingKey);
+
+    // Check game pause state - allow only UI-related hotkeys when paused
+    if (binding) {
+      const gameState = useGameStore.getState();
+      if (gameState.isPaused) {
+        if (!HotkeyManager.PAUSED_ALLOWED_ACTIONS.has(binding.action)) return;
+      }
+    }
 
     if (binding) {
       event?.preventDefault?.();
@@ -315,6 +326,11 @@ export class HotkeyManager {
       const modifiers = this.extractModifiers(normalizedKey);
       const baseKey = this.extractBaseKey(normalizedKey);
       const bindingKey = this.getBindingKey(baseKey, modifiers);
+
+      const existing = this.bindings.get(bindingKey);
+      if (existing) {
+        console.warn(`[HotkeyManager] Key binding conflict: "${bindingKey}" already bound to "${existing.action}", overwriting with "${binding.action}"`);
+      }
 
       this.bindings.set(bindingKey, {
         ...binding,

@@ -18,14 +18,18 @@ const SHORTCUTS_DATA: ShortcutCategory[] = [
     name: '移动与攻击',
     shortcuts: [
       { key: 'G', description: '移动到指定位置', category: 'move' },
-      { key: 'A', description: '攻击指定目标', category: 'move' },
+      { key: 'A', description: '攻击移动/攻击指定目标', category: 'move' },
       { key: 'P', description: '巡逻', category: 'move' },
       { key: 'F', description: '防守', category: 'move' },
       { key: 'H', description: '采集资源', category: 'move' },
       { key: 'S', description: '停止当前动作', category: 'move' },
       { key: 'D', description: '警戒模式', category: 'move' },
       { key: 'K', description: '强制攻击', category: 'move' },
-      { key: 'R', description: '撤退', category: 'move' }
+      { key: 'R', description: '撤退/修理建筑', category: 'move' },
+      { key: 'T', description: '装载步兵到运输载具', category: 'move' },
+      { key: 'U', description: '卸载运输载具乘客', category: 'move' },
+      { key: 'C', description: '工程师占领建筑', category: 'move' },
+      { key: 'E', description: '车辆前往维修工厂', category: 'move' }
     ]
   },
   {
@@ -36,7 +40,7 @@ const SHORTCUTS_DATA: ShortcutCategory[] = [
       { key: 'Tab', description: '选择下一个单位', category: 'selection' },
       { key: 'Shift+Tab', description: '选择上一个单位', category: 'selection' },
       { key: 'Ctrl+A', description: '全选所有同类单位', category: 'selection' },
-      { key: 'Ctrl+点击', description: '追加选择', category: 'selection' },
+      { key: 'Ctrl+点击', description: '追加选择同类型单位', category: 'selection' },
       { key: '双击', description: '选择屏幕内所有同类单位', category: 'selection' },
       { key: '框选', description: '框选多个单位', category: 'selection' }
     ]
@@ -48,7 +52,10 @@ const SHORTCUTS_DATA: ShortcutCategory[] = [
       { key: 'Q', description: '设置集结点', category: 'building' },
       { key: 'R', description: '修理建筑', category: 'building' },
       { key: 'Del', description: '出售建筑', category: 'building' },
-      { key: 'E', description: '进入建筑', category: 'building' }
+      { key: 'E', description: '进入建筑', category: 'building' },
+      { key: 'N', description: '核弹攻击（选中核弹井）', category: 'building' },
+      { key: 'I', description: '铁幕护盾（选中铁幕装置）', category: 'building' },
+      { key: 'C', description: '超时空传送（选中超时空）', category: 'building' }
     ]
   },
   {
@@ -56,10 +63,10 @@ const SHORTCUTS_DATA: ShortcutCategory[] = [
     shortcuts: [
       { key: 'F1', description: '显示快捷键帮助', category: 'ui' },
       { key: 'M', description: '展开/收起小地图', category: 'ui' },
-      { key: 'Alt+A', description: '切换界面动画', category: 'ui' },
-      { key: 'Esc', description: '取消当前操作', category: 'ui' },
-      { key: '空格', description: '聚焦主基地', category: 'ui' },
-      { key: 'Delete', description: '删除/出售', category: 'ui' },
+      { key: 'Esc', description: '取消当前操作/取消选择', category: 'ui' },
+      { key: '空格', description: '暂停/继续游戏', category: 'ui' },
+      { key: '+/-', description: '调整游戏速度', category: 'ui' },
+      { key: '0', description: '重置游戏速度为1x', category: 'ui' },
       { key: 'Enter', description: '聊天/确认', category: 'ui' }
     ]
   },
@@ -71,14 +78,13 @@ const SHORTCUTS_DATA: ShortcutCategory[] = [
       { key: 'A/←', description: '向左移动', category: 'camera' },
       { key: 'D/→', description: '向右移动', category: 'camera' },
       { key: '滚轮', description: '缩放视角', category: 'camera' },
-      { key: 'N', description: '下一个警报', category: 'camera' },
       { key: 'Home', description: '回到起始位置', category: 'camera' }
     ]
   },
   {
     name: '战斗指令',
     shortcuts: [
-      { key: 'N', description: '下一个敌人', category: 'combat' },
+      { key: 'N', description: '下一个敌人/核弹攻击', category: 'combat' },
       { key: 'Alt+点击', description: '攻击移动', category: 'combat' },
       { key: 'Ctrl+Shift+点击', description: '分散攻击', category: 'combat' }
     ]

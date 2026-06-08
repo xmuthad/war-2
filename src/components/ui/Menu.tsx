@@ -9,7 +9,12 @@ import { ACHIEVEMENTS } from '../../game/data/achievements';
 import './Menu.css';
 
 export const Menu: React.FC = () => {
-  const { setGameState, initializeGame, gameSettings, setGameSettings, unlockedAchievements, startTutorial } = useGameStore();
+  const setGameState = useGameStore(s => s.setGameState);
+  const initializeGame = useGameStore(s => s.initializeGame);
+  const gameSettings = useGameStore(s => s.gameSettings);
+  const setGameSettings = useGameStore(s => s.setGameSettings);
+  const unlockedAchievements = useGameStore(s => s.unlockedAchievements);
+  const startTutorial = useGameStore(s => s.startTutorial);
   const [selectedFaction, setSelectedFaction] = React.useState<Faction>(Faction.USA);
   const [selectedDifficulty, setSelectedDifficulty] = React.useState<Difficulty>(Difficulty.NORMAL);
   const [selectedMap, setSelectedMap] = React.useState<MapPreset | null>(mapPresets[0]);

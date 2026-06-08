@@ -1,12 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../game/config/GameConfig';
+import { BuildingType } from '../../types';
 import './ResourceBar.css';
+
+const SUPERWEAPON_INFO: Record<string, { icon: string; name: string }> = {
+  [BuildingType.NUCLEAR_SILO]: { icon: '☢️', name: '核弹' },
+  [BuildingType.IRON_CURTAIN]: { icon: '🛡️', name: '铁幕' },
+  [BuildingType.CHRONOSPHERE]: { icon: '🌀', name: '超时空' },
+};
+
+const formatTime = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 export const ResourceBar: React.FC = () => {
   const resources = useGameStore(s => s.resources);
   const currentPlayer = useGameStore(s => s.currentPlayer);
   const gameSpeed = useGameStore(s => s.gameSpeed);
+  const setGameSpeed = useGameStore(s => s.setGameSpeed);
   const [isCompact, setIsCompact] = useState(false);
 
   const resourcesDisplay = useMemo(() => {
@@ -51,6 +65,52 @@ export const ResourceBar: React.FC = () => {
     }
     return Math.round(num).toString();
   };
+
+  const aiPlayers = useGameStore(s => s.aiPlayers);
+  const superweaponsEnabled = useGameStore(s => s.gameSettings.superweaponsEnabled);
+
+  const superweaponStatus = useMemo(() => {
+    if (!superweaponsEnabled || !currentPlayer) return [];
+    const allPlayers = [currentPlayer, ...aiPlayers].filter(Boolean);
+    const result: Array<{
+      id: string;
+      icon: string;
+      name: string;
+      ready: boolean;
+      progress: number;
+      remaining: number;
+      isOwn: boolean;
+      playerName: string;
+      playerColor: string;
+    }> = [];
+    for (const player of allPlayers) {
+      for (const b of player.buildings) {
+        if (b.superweaponChargeTime && b.isConstructed) {
+          const info = SUPERWEAPON_INFO[b.type];
+          if (!info) continue;
+          const progress = b.superweaponReady
+            ? 1
+            : (b.superweaponChargeProgress || 0) / b.superweaponChargeTime;
+          const remaining = b.superweaponReady
+            ? 0
+            : b.superweaponChargeTime - (b.superweaponChargeProgress || 0);
+          result.push({
+            id: b.id,
+            icon: info.icon,
+            name: info.name,
+            ready: !!b.superweaponReady,
+            progress,
+            remaining,
+            isOwn: player.id === currentPlayer.id,
+            playerName: player.name,
+            playerColor: player.color,
+          });
+        }
+      }
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [superweaponsEnabled, currentPlayer?.id, currentPlayer?.buildings, aiPlayers]);
 
   const powerResource = resourcesDisplay.find(r => r.id === 'power');
   const maxPower = currentPlayer?.maxPower ?? GAME_CONFIG.STARTING_MAX_POWER;
@@ -129,10 +189,14 @@ export const ResourceBar: React.FC = () => {
             <span className="count-value">{totalBuildings}</span>
             <span className="count-label">建筑</span>
           </div>
-          <div className={`count-item speed-${gameSpeed}`}>
+          <div className={`count-item speed-${gameSpeed}`} onClick={() => setGameSpeed(((gameSpeed % 4) + 1) as 1 | 2 | 3 | 4)} title="点击切换游戏速度" style={{ cursor: 'pointer' }}>
             <span className="count-icon">{gameSpeed >= 4 ? '⚡⚡' : gameSpeed >= 3 ? '⚡' : '⏵'}</span>
             <span className="count-value">{gameSpeed}x</span>
             <span className="count-label">速度</span>
+          </div>
+          <div className="count-item surrender-btn" onClick={() => { if (window.confirm('确定要投降吗？')) useGameStore.getState().surrender(); }} title="投降" style={{ cursor: 'pointer' }}>
+            <span className="count-icon">🏳️</span>
+            <span className="count-label">投降</span>
           </div>
         </div>
       )}
@@ -149,6 +213,40 @@ export const ResourceBar: React.FC = () => {
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {!isCompact && superweaponStatus.length > 0 && (
+        <div className="superweapon-section">
+          <div className="superweapon-header">
+            <span className="superweapon-title">⚠️ 超级武器</span>
+          </div>
+          {superweaponStatus.map(sw => (
+            <div key={sw.id} className={`superweapon-item ${sw.ready ? 'ready' : ''} ${sw.isOwn ? 'own' : 'enemy'}`}>
+              <div className="superweapon-info">
+                <span className="superweapon-icon">{sw.icon}</span>
+                <span className="superweapon-name">{sw.name}</span>
+                {!sw.isOwn && (
+                  <span className="superweapon-player" style={{ color: sw.playerColor }}>
+                    {sw.playerName}
+                  </span>
+                )}
+              </div>
+              {sw.ready ? (
+                <span className="superweapon-ready-text">就绪</span>
+              ) : (
+                <div className="superweapon-charge">
+                  <div className="superweapon-bar">
+                    <div
+                      className={`superweapon-fill ${sw.progress > 0.8 ? 'high' : sw.progress > 0.5 ? 'mid' : 'low'}`}
+                      style={{ width: `${Math.min(100, sw.progress * 100)}%` }}
+                    />
+                  </div>
+                  <span className="superweapon-time">{formatTime(sw.remaining)}</span>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

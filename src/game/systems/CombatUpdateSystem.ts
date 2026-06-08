@@ -1,9 +1,17 @@
 import type { Unit, Player, Vector2, Faction, Building } from '../../types';
-import { UnitState, TileType, UnitRank, UnitType, UpgradeType } from '../../types';
+import { UnitState, TileType, UnitRank, UnitType, UpgradeType, BuildingType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { combatSystem, TerroristExplosion, DamageType, ArmorType, ProjectileType, SplashConfig, Projectile } from './CombatSystem';
 import { mapManager } from '../map/MapManager';
+import { useGameStore } from '../../store/gameStore';
 import { gameEventBus } from './GameEventBus';
+
+// Buildings that can target airborne units
+const ANTI_AIR_BUILDINGS = new Set<BuildingType>([
+  BuildingType.TESLA_COIL,
+  BuildingType.TURRET,
+  BuildingType.DEFENSE,
+]);
 
 function distance(a: Vector2, b: Vector2): number {
   const dx = a.x - b.x;
@@ -35,14 +43,20 @@ export class CombatUpdateSystem {
     splashConfig: SplashConfig | null;
   }> = [];
 
+  reset(): void {
+    this.gameTime = 0;
+    this.pendingDamage = [];
+  }
+
+  /** Call once per frame to update global combat state (game time, projectiles). */
+  updateFrame(deltaTime: number, allPlayers: Player[], destroyUnit: (unitId: string) => void, destroyBuilding: (buildingId: string) => void): void {
+    this.gameTime += deltaTime;
+    this.processFinishedProjectiles(allPlayers, deltaTime, destroyUnit, destroyBuilding);
+  }
+
   update(unit: Unit, player: Player, allPlayers: Player[], deltaTime: number, destroyUnit: (unitId: string) => void, destroyBuilding: (buildingId: string) => void): void {
     // Skip units inside a transport
     if (unit.transportId) return;
-
-    this.gameTime += deltaTime;
-
-    // Update projectiles and process finished ones
-    this.processFinishedProjectiles(allPlayers, deltaTime, destroyUnit, destroyBuilding);
 
     switch (unit.state) {
       case UnitState.ATTACKING:
@@ -181,14 +195,10 @@ export class CombatUpdateSystem {
     const effectiveRange = unit.attackRange * GAME_CONFIG.TILE_SIZE;
 
     if (attackDist > effectiveRange) {
-      const dx = targetPos.x - unit.position.x;
-      const dy = targetPos.y - unit.position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime;
-      const ratio = Math.min(1, moveSpeed / dist);
-      unit.position.x += dx * ratio;
-      unit.position.y += dy * ratio;
-      unit.direction = getDirectionFromDelta(dx, dy);
+      // Use waypoints for pathfinding-aware chase instead of direct movement
+      if (unit.waypoints.length === 0 || unit.waypoints[unit.waypoints.length - 1].x !== targetPos.x || unit.waypoints[unit.waypoints.length - 1].y !== targetPos.y) {
+        unit.waypoints = [{ ...targetPos }];
+      }
     } else {
       unit.direction = getDirectionFromDelta(
         targetPos.x - unit.position.x,
@@ -204,8 +214,11 @@ export class CombatUpdateSystem {
         if (unit.type === UnitType.TERRORIST) {
           const explosion = combatSystem.handleTerroristAttack(unit);
           if (explosion) {
+            explosion.teamId = player.teamId;
             this.applyTerroristExplosion(explosion, allPlayers, destroyUnit, destroyBuilding);
           }
+          // Mark as already exploded to prevent double explosion in destroyUnit
+          (unit as unknown as Record<string, unknown>)._terroristExploded = true;
           destroyUnit(unit.id);
           return;
         }
@@ -327,8 +340,8 @@ export class CombatUpdateSystem {
 
               // EMP Tech: Tesla units disable enemy buildings for 10 seconds
               if (unit.type === UnitType.TESLA && player.researchedUpgrades.includes(UpgradeType.EMP_TECH)) {
-                currentTargetBuilding.empDisabledUntil = Date.now() + 10000;
-                gameEventBus.emit('combat:emp', { attackerId: unit.id, targetId: currentTargetBuilding.id, position: currentTargetBuilding.position });
+                currentTargetBuilding.empDisabledUntil = useGameStore.getState().gameTime + 10;
+                gameEventBus.emit('combat:emp', { attackerId: unit.id, targetId: currentTargetBuilding.id, position: currentTargetBuilding.position, attackerPosition: unit.position });
               }
 
               gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetBuilding.id, damage: finalDamage, position: currentTargetBuilding.position });
@@ -373,8 +386,8 @@ export class CombatUpdateSystem {
     const radiusPixels = explosion.radius * GAME_CONFIG.TILE_SIZE;
 
     for (const player of allPlayers) {
-      // Skip same faction (friendly fire off)
-      if (player.faction === explosion.faction) continue;
+      // Skip allies (use teamId-based check, not faction)
+      if (!isEnemy(explosion.faction, explosion.teamId, player.faction, player.teamId)) continue;
 
       // Damage units in radius
       for (const unit of [...player.units]) {
@@ -438,7 +451,7 @@ export class CombatUpdateSystem {
   updateBuildingCombat(building: Building, player: Player, allPlayers: Player[], deltaTime: number, destroyUnit: (unitId: string) => void): void {
     if (!building.attack || building.attack <= 0) return;
     if (!building.isConstructed || !building.isPowered) return;
-    if (building.empDisabledUntil && building.empDisabledUntil > Date.now()) return;
+    if (building.empDisabledUntil && building.empDisabledUntil > useGameStore.getState().gameTime) return;
 
     const enemyPlayers = allPlayers.filter(p =>
       isEnemy(building.faction, player.teamId, p.faction, p.teamId)
@@ -456,6 +469,22 @@ export class CombatUpdateSystem {
         const targetDist = distance(building.position, targetUnit.position);
         if (targetDist > effectiveRange) {
           building.attackTarget = null;
+        } else if (targetDist > effectiveRange * 0.6) {
+          // Re-evaluate: if current target is far (>60% range), check for closer threats
+          let nearestDist = targetDist;
+          let nearestEnemy: Unit | null = null;
+          const canTargetAir = ANTI_AIR_BUILDINGS.has(building.type);
+          for (const enemy of enemyUnits) {
+            if (!canTargetAir && enemy.isAirborne) continue;
+            const d = distance(building.position, enemy.position);
+            if (d <= effectiveRange * 0.6 && d < nearestDist) {
+              nearestDist = d;
+              nearestEnemy = enemy;
+            }
+          }
+          if (nearestEnemy) {
+            building.attackTarget = nearestEnemy.id;
+          }
         }
       }
     }
@@ -464,7 +493,10 @@ export class CombatUpdateSystem {
     if (!building.attackTarget) {
       let nearestDist = Infinity;
       let nearestEnemy: Unit | null = null;
+      const canTargetAir = ANTI_AIR_BUILDINGS.has(building.type);
       for (const enemy of enemyUnits) {
+        // Ground-only buildings cannot target airborne units
+        if (!canTargetAir && enemy.isAirborne) continue;
         const d = distance(building.position, enemy.position);
         if (d <= effectiveRange && d < nearestDist) {
           nearestDist = d;
@@ -492,7 +524,7 @@ export class CombatUpdateSystem {
         if (building.attackCooldown === undefined) building.attackCooldown = 0;
 
         if (building.attackCooldown <= 0) {
-          const damageType = DamageType.KINETIC;
+          const damageType = combatSystem.getDamageTypeForBuilding(building);
           const armorType = combatSystem.getArmorTypeForUnit(targetUnit.type);
           const finalDamage = combatSystem.calculateDamage(
             building.attack,

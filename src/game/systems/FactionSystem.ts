@@ -1,4 +1,5 @@
 import { Faction, FactionGroup, FACTION_INFO } from '../../types';
+import { useGameStore } from '../../store/gameStore';
 
 /**
  * Types of special abilities available to factions
@@ -425,13 +426,12 @@ export class FactionSystem {
   canUseAbility(abilityType: string): boolean {
     const ability = this.getSpecialAbility();
     if (!ability || ability.type !== abilityType) {
-      console.warn(`Ability type '${abilityType}' not available for faction ${this.faction}`);
       return false;
     }
 
     const activeAbility = this.activeAbilities.get(abilityType);
     if (activeAbility) {
-      return Date.now() >= activeAbility.endTime;
+      return useGameStore.getState().gameTime * 1000 >= activeAbility.endTime;
     }
     return true;
   }
@@ -444,13 +444,10 @@ export class FactionSystem {
   useAbility(context: AbilityContext): AbilityEffect | null {
     const ability = this.getSpecialAbility();
     if (!ability) {
-      console.warn(`No special ability available for faction ${this.faction}`);
       return null;
     }
 
     if (!this.canUseAbility(ability.type)) {
-      const remainingCooldown = this.getRemainingCooldown(ability.type);
-      console.warn(`Ability '${ability.type}' is on cooldown. Remaining: ${remainingCooldown}ms`);
       return null;
     }
 
@@ -460,7 +457,7 @@ export class FactionSystem {
       if (ability.cooldown > 0) {
         this.activeAbilities.set(ability.type, {
           ability,
-          endTime: Date.now() + ability.cooldown,
+          endTime: useGameStore.getState().gameTime * 1000 + ability.cooldown,
         });
       }
 
@@ -479,7 +476,7 @@ export class FactionSystem {
   getRemainingCooldown(abilityType: string): number {
     const activeAbility = this.activeAbilities.get(abilityType);
     if (!activeAbility) return 0;
-    return Math.max(0, activeAbility.endTime - Date.now());
+    return Math.max(0, activeAbility.endTime - useGameStore.getState().gameTime * 1000);
   }
 
   /**

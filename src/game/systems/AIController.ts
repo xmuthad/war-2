@@ -3,8 +3,17 @@ import type { AIContext } from './AITypes';
 import type { ThreatLevel } from './AITypes';
 import { AIAction } from './AITasks';
 import { getDistance, getDifficultyConfig, calculateThreatLevel } from './AIUtils';
-import { Faction, Difficulty, Vector2, UpgradeType } from '../../types';
+import { Faction, Difficulty, Vector2, UpgradeType, BuildingType } from '../../types';
 import { AI_CONFIG } from '../config/AIConfig';
+import { useGameStore } from '../../store/gameStore';
+
+/** Building types that provide defensive coverage */
+const DEFENSE_BUILDING_TYPES = new Set<string>([
+  BuildingType.DEFENSE,
+  BuildingType.TURRET,
+  BuildingType.TESLA_COIL,
+  BuildingType.FLAME_TOWER,
+]);
 
 export interface AIControllerConfig {
   faction: Faction;
@@ -30,6 +39,11 @@ export class AIController {
   private currentOrders: Map<string, AIOrder> = new Map();
   private lastResearchCheck: number = 0;
   private researchCheckInterval: number;
+
+  /** Get game time in milliseconds (consistent with gameTime, pauses with game) */
+  private getGameTimeMs(): number {
+    return useGameStore.getState().gameTime * 1000;
+  }
 
   constructor(config: AIControllerConfig) {
     this.config = config;
@@ -75,7 +89,7 @@ export class AIController {
 
   public start(): void {
     this.isActive = true;
-    this.lastTick = Date.now();
+    this.lastTick = this.getGameTimeMs();
   }
 
   public stop(): void {
@@ -88,13 +102,13 @@ export class AIController {
 
   public resume(): void {
     this.isActive = true;
-    this.lastTick = Date.now();
+    this.lastTick = this.getGameTimeMs();
   }
 
   public update(context: AIContext): AIAction[] {
     if (!this.isActive) return [];
 
-    const now = Date.now();
+    const now = this.getGameTimeMs();
     if (now - this.lastTick < this.tickInterval) {
       return [];
     }
@@ -266,6 +280,20 @@ export class AIController {
             return true;
           }
           break;
+
+        case 'chronoShift':
+          if (action.unitId && action.position) {
+            gameCommands.chronoShiftUnit(action.unitId, action.position);
+            return true;
+          }
+          break;
+
+        case 'sellBuilding':
+          if (action.buildingId) {
+            gameCommands.sellBuilding(action.buildingId);
+            return true;
+          }
+          break;
       }
 
       return false;
@@ -358,7 +386,7 @@ export class AIController {
     const vulnerabilities: Vulnerability[] = [];
 
     const defenses = context.aiPlayer.buildings.filter(b => 
-      b.isConstructed && b.type.includes('defense')
+      b.isConstructed && DEFENSE_BUILDING_TYPES.has(b.type)
     );
 
     for (const building of context.aiPlayer.buildings) {
@@ -456,6 +484,8 @@ export interface GameCommands {
   unloadFromTransport: (transportId: string, position?: Vector2) => void;
   activateSuperweapon: (buildingId: string, position: Vector2) => void;
   activateChronosphere: (buildingId: string, sourcePosition: Vector2, targetPosition: Vector2) => void;
+  chronoShiftUnit: (unitId: string, targetPosition: Vector2) => void;
+  sellBuilding: (buildingId: string) => void;
 }
 
 export interface ThreatAssessment {

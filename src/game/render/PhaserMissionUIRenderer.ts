@@ -10,6 +10,7 @@ export class PhaserMissionUIRenderer implements MissionUIRenderer {
   private scene: Phaser.Scene;
   private uiContainer: Phaser.GameObjects.Container | null = null;
   private objectiveDisplays: Map<string, Phaser.GameObjects.Container> = new Map();
+  private missionCompleteObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -55,6 +56,9 @@ export class PhaserMissionUIRenderer implements MissionUIRenderer {
   }
 
   showMissionComplete(data: MissionCompleteDisplayData): void {
+    // Clean up previous mission complete objects
+    this.clearMissionCompleteObjects();
+
     const overlay = this.scene.add.rectangle(
       this.scene.cameras.main.centerX,
       this.scene.cameras.main.centerY,
@@ -110,6 +114,8 @@ export class PhaserMissionUIRenderer implements MissionUIRenderer {
     stats.setDepth(2101);
     stats.setAlpha(0);
 
+    this.missionCompleteObjects = [overlay, title, stats];
+
     this.scene.tweens.add({
       targets: [overlay, title, stats],
       alpha: 1,
@@ -122,6 +128,19 @@ export class PhaserMissionUIRenderer implements MissionUIRenderer {
       duration: 500,
       ease: 'Back.easeOut'
     });
+
+    // Auto-destroy after 8 seconds
+    this.scene.time.delayedCall(8000, () => {
+      this.clearMissionCompleteObjects();
+    });
+  }
+
+  private clearMissionCompleteObjects(): void {
+    for (const obj of this.missionCompleteObjects) {
+      this.scene.tweens.killTweensOf(obj);
+      obj.destroy();
+    }
+    this.missionCompleteObjects = [];
   }
 
   private createObjectiveDisplay(objective: ObjectiveDisplayData): Phaser.GameObjects.Container {
@@ -235,6 +254,7 @@ export class PhaserMissionUIRenderer implements MissionUIRenderer {
   }
 
   dispose(): void {
+    this.clearMissionCompleteObjects();
     this.objectiveDisplays.forEach(d => d.destroy());
     this.objectiveDisplays.clear();
     this.uiContainer?.destroy();

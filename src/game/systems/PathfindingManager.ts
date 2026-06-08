@@ -635,6 +635,8 @@ export class PathfindingManager {
     }
     // Clear pathfinder cache since grid changed
     this.pathfinder.clearCache();
+    // Invalidate active paths so units re-pathfind around new obstacles
+    this.activePaths.clear();
   }
 
   // 更新动态障碍物（每帧调用）

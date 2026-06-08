@@ -30,7 +30,15 @@ function App() {
         ) : gameState === GameState.MISSION_DEBRIEFING ? (
           <MissionDebriefingWrapper />
         ) : (
-          <GameCanvas />
+          <ErrorBoundary fallback={
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#fff', background: '#1a1a2e' }}>
+              <h2>Game Error</h2>
+              <p>The game encountered an error. Please try restarting.</p>
+              <button onClick={() => window.location.reload()} style={{ marginTop: 16, padding: '8px 24px', cursor: 'pointer' }}>Reload Game</button>
+            </div>
+          }>
+            <GameCanvas />
+          </ErrorBoundary>
         )}
       </div>
     </ErrorBoundary>
@@ -38,7 +46,8 @@ function App() {
 }
 
 const CampaignSelectWrapper: React.FC = () => {
-  const { setGameState, campaignProgress } = useGameStore();
+  const setGameState = useGameStore(s => s.setGameState);
+  const campaignProgress = useGameStore(s => s.campaignProgress);
   return (
     <CampaignSelect
       onSelectMission={(mission) => {
@@ -53,7 +62,8 @@ const CampaignSelectWrapper: React.FC = () => {
 };
 
 const MissionBriefingWrapper: React.FC = () => {
-  const { selectedMission, setGameState } = useGameStore();
+  const selectedMission = useGameStore(s => s.selectedMission);
+  const setGameState = useGameStore(s => s.setGameState);
   if (!selectedMission) {
     setGameState(GameState.CAMPAIGN_SELECT);
     return null;
@@ -70,7 +80,11 @@ const MissionBriefingWrapper: React.FC = () => {
 };
 
 const MissionDebriefingWrapper: React.FC = () => {
-  const { missionResult, missionStats, selectedMission, selectedCampaign, setGameState } = useGameStore();
+  const missionResult = useGameStore(s => s.missionResult);
+  const missionStats = useGameStore(s => s.missionStats);
+  const selectedMission = useGameStore(s => s.selectedMission);
+  const selectedCampaign = useGameStore(s => s.selectedCampaign);
+  const setGameState = useGameStore(s => s.setGameState);
   if (!missionResult || !missionStats || !selectedMission) {
     setGameState(GameState.CAMPAIGN_SELECT);
     return null;

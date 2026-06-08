@@ -109,11 +109,6 @@ export class AttackWaveSystem {
     state.waveCount++;
     state.lastWaveSize = wave.length;
     state.cooldownTimer = this.WAVE_COOLDOWN;
-
-    console.log(
-      `[AttackWave] Player ${aiPlayer.name} wave #${state.waveCount}: ` +
-      `${wave.length} units dispatched to (${Math.floor(target.x)}, ${Math.floor(target.y)})`
-    );
   }
 }
 

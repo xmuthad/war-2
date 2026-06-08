@@ -4,7 +4,10 @@ import { UnitRank } from '../../types';
 import './Scoreboard.css';
 
 export const Scoreboard: React.FC = () => {
-  const { currentPlayer, aiPlayers, showStats, gameTime } = useGameStore();
+  const currentPlayer = useGameStore(s => s.currentPlayer);
+  const aiPlayers = useGameStore(s => s.aiPlayers);
+  const showStats = useGameStore(s => s.showStats);
+  const gameTime = useGameStore(s => s.gameTime);
 
   if (!showStats) return null;
 
