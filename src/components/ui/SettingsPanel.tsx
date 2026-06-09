@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { gameUIController } from '../../game/ui/GameUIController';
 import { useGameStore } from '../../store/gameStore';
+import { gameEventBus } from '../../game/systems/GameEventBus';
 import './SettingsPanel.css';
 
 export interface GameSettings {
@@ -157,14 +158,11 @@ export const SettingsPanel: React.FC = () => {
       store.setGameSpeed(settings.gameplay.gameSpeed as 1 | 2 | 3 | 4);
     }
     // Apply audio volume via game event bus
-    try {
-      const { gameEventBus } = require('../../game/systems/GameEventBus');
-      gameEventBus.emit('settings:volumeChanged', {
-        master: settings.audio.masterVolume / 100,
-        music: settings.audio.musicVolume / 100,
-        sfx: settings.audio.sfxVolume / 100,
-      });
-    } catch { /* Event bus not available */ }
+    gameEventBus.emit('settings:volumeChanged', {
+      master: settings.audio.masterVolume / 100,
+      music: settings.audio.musicVolume / 100,
+      sfx: settings.audio.sfxVolume / 100,
+    });
   };
 
   if (!isOpen) {

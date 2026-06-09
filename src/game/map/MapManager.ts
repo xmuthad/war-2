@@ -28,6 +28,8 @@ const TILE_PROPERTIES: Record<TileType, { walkable: boolean; buildable: boolean;
   [TileType.RUBBLE]: { walkable: true, buildable: false, movementCost: 1.5 },
   [TileType.CRATER]: { walkable: true, buildable: false, movementCost: 1.8 },
   [TileType.CLIFF]: { walkable: false, buildable: false, movementCost: 99 },
+  [TileType.BRIDGE]: { walkable: true, buildable: false, movementCost: 0.8 },
+  [TileType.BRIDGE_DESTROYED]: { walkable: false, buildable: false, movementCost: 99 },
 };
 
 export function getTileProperties(type: TileType): { walkable: boolean; buildable: boolean; movementCost: number } {
@@ -128,7 +130,7 @@ export class MapManager {
     return this.getTile(tileX, tileY)?.type === TileType.WATER;
   }
 
-  isBuildable(x: number, y: number, width: number = 1, height: number = 1, playerBuildings?: Array<{position: {x: number, y: number}, width: number, height: number}>): boolean {
+  isBuildable(x: number, y: number, width: number = 1, height: number = 1, playerBuildings?: Array<{position: {x: number, y: number}, width: number, height: number}>, isNavalBuilding: boolean = false): boolean {
     if (!this.map) return false;
 
     for (let dy = 0; dy < height; dy++) {
@@ -136,7 +138,13 @@ export class MapManager {
         const tx = x + dx;
         const ty = y + dy;
         const tile = this.getTile(tx, ty);
-        if (!tile || !tile.buildable) return false;
+        if (!tile) return false;
+        // Naval buildings (shipyard) can be placed on water tiles
+        if (isNavalBuilding) {
+          if (tile.type !== TileType.WATER) return false;
+        } else {
+          if (!tile.buildable) return false;
+        }
         const key = `${tx},${ty}`;
         if (this.occupiedTiles.has(key)) return false;
       }

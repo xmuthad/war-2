@@ -32,7 +32,7 @@ function createMockContext(): AIContext {
         speed: 5,
         range: 200,
         state: 'idle',
-        data: { canAttack: true, canHarvest: false, canBuild: false }
+        data: { canAttack: true, canHarvest: false, canCapture: false }
       },
       {
         id: 'unit-2',

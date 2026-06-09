@@ -117,6 +117,22 @@ export class AIBrain {
       ])
     );
 
+    root.addChild(
+      new SequenceNode('garrison', 'Garrison Infantry', [
+        createConditionCheck('can_garrison', 'Has Infantry Near Garrisonable Building',
+          (ctx) => this.canGarrison(ctx)),
+        this.createGarrisonSequence()
+      ])
+    );
+
+    root.addChild(
+      new SequenceNode('deploy', 'Deploy MCV', [
+        createConditionCheck('can_deploy_mcv', 'Has Deployable Unit',
+          (ctx) => this.canDeployMCV(ctx)),
+        this.createDeploySequence()
+      ])
+    );
+
     return root;
   }
 
@@ -1305,6 +1321,7 @@ export class AIBrain {
       if (unitType === UnitType.SOLDIER || unitType === UnitType.CONSCRIPT) weight = 1;
       if (unitType === UnitType.SNIPER) weight = 1.2;
       if (unitType === UnitType.TANYA || unitType === UnitType.SEAL) weight = 0.8;
+      if (unitType === UnitType.SPY) weight = 0.5;
       if (unitType === UnitType.TERRORIST) weight = 1;
       if (unitType === UnitType.IVAN) weight = 0.8;
       weighted.push({ type: unitType, weight });
@@ -1766,8 +1783,13 @@ export class AIBrain {
     if (transports.length === 0) return actions;
 
     // Find infantry not in a transport (idle, defending, or moving - not attacking/retreating)
+    const infantryTypes = new Set([
+      UnitType.SOLDIER, UnitType.ENGINEER, UnitType.ROCKET, UnitType.SNIPER,
+      UnitType.TANYA, UnitType.SEAL, UnitType.CONSCRIPT, UnitType.FLAKINFANTRY,
+      UnitType.TERRORIST, UnitType.IVAN, UnitType.CHRONO, UnitType.SPY,
+    ]);
     const infantry = aiPlayer.units.filter(u =>
-      u.isInfantry && !u.transportId &&
+      infantryTypes.has(u.type as UnitType) && !u.transportId &&
       (u.state === 'idle' || u.state === 'defending' || u.state === 'moving')
     );
 

@@ -1,6 +1,14 @@
 import { Unit, Building, UnitType, BuildingType, Vector2, PendingBomb, Faction, Player, TileType } from '../../types';
 import { mapManager } from '../map/MapManager';
 import { gameEventBus } from './GameEventBus';
+import { useGameStore } from '../../store/gameStore';
+
+const INFANTRY_UNIT_TYPES = new Set<UnitType>([
+  UnitType.SOLDIER, UnitType.ROCKET, UnitType.SNIPER, UnitType.SEAL,
+  UnitType.TANYA, UnitType.CONSCRIPT, UnitType.FLAKINFANTRY,
+  UnitType.TERRORIST, UnitType.IVAN, UnitType.CHRONO, UnitType.SPY,
+  UnitType.ATTACK_DOG, UnitType.GI, UnitType.GUARDIAN_GI, UnitType.BRUTE,
+]);
 
 export interface TerroristExplosion {
   position: Vector2;
@@ -102,12 +110,14 @@ const INFANTRY_TYPES = new Set<UnitType>([
   UnitType.TERRORIST,
   UnitType.IVAN,
   UnitType.CHRONO,
+  UnitType.SPY,
 ]);
 
 const LIGHT_VEHICLE_TYPES = new Set<UnitType>([
   UnitType.IFV,
   UnitType.FLAK,
   UnitType.APC,
+  UnitType.MINER,
 ]);
 
 const MEDIUM_TANK_TYPES = new Set<UnitType>([
@@ -116,11 +126,14 @@ const MEDIUM_TANK_TYPES = new Set<UnitType>([
   UnitType.PRISM,
   UnitType.PHANTOM,
   UnitType.GUARDIAN,
+  UnitType.TRANSPORT_SHIP,
 ]);
 
 const HEAVY_TANK_TYPES = new Set<UnitType>([
   UnitType.APOCALYPSE,
   UnitType.DESPOT,
+  UnitType.DESTROYER,
+  UnitType.SUBMARINE,
 ]);
 
 const AIR_TYPES = new Set<UnitType>([
@@ -134,11 +147,25 @@ const KINETIC_DAMAGE_TYPES = new Set<UnitType>([
   UnitType.SNIPER,
   UnitType.TANYA,
   UnitType.SEAL,
+  UnitType.SOLDIER,
+  UnitType.CONSCRIPT,
+  UnitType.FLAKINFANTRY,
 ]);
 
 const EXPLOSIVE_DAMAGE_TYPES = new Set<UnitType>([
   UnitType.ROCKET,
   UnitType.TERRORIST,
+  UnitType.TANK,
+  UnitType.RHINO,
+  UnitType.APOCALYPSE,
+  UnitType.IFV,
+  UnitType.FLAK,
+  UnitType.KIROV,
+  UnitType.YAK,
+  UnitType.DESTROYER,
+  UnitType.SUBMARINE,
+  UnitType.BLACKHAWK,
+  UnitType.HELICOPTER,
 ]);
 
 const ENERGY_DAMAGE_TYPES = new Set<UnitType>([
@@ -319,8 +346,13 @@ export class CombatSystem {
 
   calculateDamage(baseDamage: number, damageType: DamageType, armorType: ArmorType, armorValue: number): number {
     const modifier = this.getDamageModifier(damageType, armorType);
-    const armorReduction = 1 - (armorValue / (armorValue + 100));
-    return Math.max(1, Math.floor(baseDamage * modifier * armorReduction));
+    const armorReduction = Math.max(0.3, 1 - (armorValue / (armorValue + 100)));
+    // Weather damage modifier: fire damage fully affected, other types partially affected
+    const weatherDamageMod = useGameStore.getState().weatherDamageModifier;
+    const weatherMod = (damageType === DamageType.FIRE)
+      ? weatherDamageMod
+      : (weatherDamageMod < 1.0 ? 1.0 - (1.0 - weatherDamageMod) * 0.5 : 1.0);
+    return Math.max(1, Math.floor(baseDamage * modifier * armorReduction * weatherMod));
   }
 
   getDamageModifier(damageType: DamageType, armorType: ArmorType): number {
@@ -401,10 +433,19 @@ export class CombatSystem {
 
   // --- Special Ability Methods ---
 
-  // Tanya C4: 10x damage vs buildings
+  // Tanya C4: 10x damage vs buildings, 5x vs vehicles
   calculateSpecialDamage(attacker: Unit, target: Unit | Building, baseDamage: number): number {
-    if (attacker.type === UnitType.TANYA && this.isBuilding(target)) {
-      return baseDamage * 10;
+    if (attacker.type === UnitType.TANYA) {
+      if (this.isBuilding(target)) {
+        return baseDamage * 10;
+      }
+      // C4 also works on non-infantry units (vehicles/aircraft)
+      if (!this.isBuilding(target) && 'type' in target) {
+        const targetUnit = target as Unit;
+        if (!INFANTRY_UNIT_TYPES.has(targetUnit.type)) {
+          return baseDamage * 5;
+        }
+      }
     }
     return baseDamage;
   }

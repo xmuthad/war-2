@@ -397,6 +397,7 @@ export const GameUI: React.FC = () => {
     return () => {
       unsubMove();
       unsubAttack();
+      if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
     };
   }, [isObserverMode]);
 
@@ -712,9 +713,10 @@ export const GameUI: React.FC = () => {
     }
   };
 
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const handleDismissNotification = (id: string) => {
     setDismissingIds(prev => new Set(prev).add(id));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       gameUIController.dismissNotification(id);
       setDismissingIds(prev => {
         const next = new Set(prev);
@@ -722,6 +724,7 @@ export const GameUI: React.FC = () => {
         return next;
       });
     }, 300);
+    dismissTimerRef.current.push(timer);
   };
 
   const renderUnitInfo = () => {
@@ -1377,6 +1380,15 @@ export const GameUI: React.FC = () => {
     }, 100);
     return () => clearInterval(interval);
   }, [pendingCommand]);
+
+  // Cleanup dismiss timers on unmount
+  useEffect(() => {
+    return () => {
+      for (const timer of dismissTimerRef.current) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
 
   return (
     <>

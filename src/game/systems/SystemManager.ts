@@ -34,6 +34,13 @@ export class SystemManager {
 
   private systems: Map<string, unknown> = new Map();
 
+  // Auto weather cycle
+  private autoWeatherTimer: number = 0;
+  private nextWeatherChangeAt: number = 0;
+  private static readonly WEATHER_TYPES: WeatherType[] = ['clear', 'cloudy', 'rain', 'snow', 'fog', 'storm', 'sandstorm'];
+  private static readonly MIN_WEATHER_INTERVAL = 120000; // 2 minutes
+  private static readonly MAX_WEATHER_INTERVAL = 300000; // 5 minutes
+
   public onAlertTriggered?: (alert: AlertEvent) => void;
   public onMissionComplete?: (success: boolean) => void;
   public onTimeOfDayChange?: (state: TimeState) => void;
@@ -77,14 +84,57 @@ export class SystemManager {
     this.statisticsSystem.setUIRenderer(new PhaserStatisticsUIRenderer(scene));
     this.statisticsSystem.create();
     this.systems.set('statistics', this.statisticsSystem);
+
+    // Initialize auto weather timer
+    this.scheduleNextWeatherChange();
   }
 
   update(time: number, delta: number): void {
     this.weatherSystem?.update(delta);
     this.dayNightCycle?.update(delta);
     this.radarSystem?.update(delta);
+    // AlertSystem uses setTimeout-based expiry, no per-frame update needed
     this.missionSystem?.update(delta);
     this.statisticsSystem?.update(delta);
+    this.updateAutoWeather(delta);
+  }
+
+  private scheduleNextWeatherChange(): void {
+    const { MIN_WEATHER_INTERVAL, MAX_WEATHER_INTERVAL } = SystemManager;
+    this.nextWeatherChangeAt = MIN_WEATHER_INTERVAL + Math.random() * (MAX_WEATHER_INTERVAL - MIN_WEATHER_INTERVAL);
+    this.autoWeatherTimer = 0;
+  }
+
+  private updateAutoWeather(delta: number): void {
+    this.autoWeatherTimer += delta;
+    if (this.autoWeatherTimer >= this.nextWeatherChangeAt) {
+      this.triggerRandomWeather();
+      this.scheduleNextWeatherChange();
+    }
+  }
+
+  private triggerRandomWeather(): void {
+    // Weighted random: clear weather is more common
+    const weights: Record<WeatherType, number> = {
+      clear: 30,
+      cloudy: 20,
+      rain: 15,
+      fog: 12,
+      snow: 8,
+      storm: 8,
+      sandstorm: 7,
+    };
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+    let roll = Math.random() * totalWeight;
+    let selected: WeatherType = 'clear';
+    for (const [type, weight] of Object.entries(weights)) {
+      roll -= weight;
+      if (roll <= 0) {
+        selected = type as WeatherType;
+        break;
+      }
+    }
+    this.startWeather(selected, 0.3 + Math.random() * 0.5, 60000 + Math.random() * 120000);
   }
 
   getSystem<T>(name: string): T | undefined {

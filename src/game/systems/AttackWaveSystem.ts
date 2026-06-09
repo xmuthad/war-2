@@ -95,10 +95,12 @@ export class AttackWaveSystem {
 
     // Dispatch attack wave - attack-move to target area
     for (const unit of wave) {
-      // First move near the target
+      // First move near the target (attack-move so units engage enemies along the way)
       const offsetX = (Math.random() - 0.5) * GAME_CONFIG.TILE_SIZE * 4;
       const offsetY = (Math.random() - 0.5) * GAME_CONFIG.TILE_SIZE * 4;
       unit.state = UnitState.MOVING;
+      unit.isAttackMoving = true;
+      unit.attackTarget = target.id;
       unit.waypoints = [{
         x: target.x + offsetX,
         y: target.y + offsetY

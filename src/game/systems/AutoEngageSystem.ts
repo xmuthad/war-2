@@ -13,6 +13,7 @@ const CAN_TARGET_AIR_TYPES = new Set<UnitType>([
   UnitType.FLAKINFANTRY,
   UnitType.FLAK,
   UnitType.ROCKET,
+  UnitType.DESTROYER,
 ]);
 
 function getDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
@@ -63,6 +64,31 @@ export class AutoEngageSystem {
           }
         }
 
+        // Spy disguise: disguised spies are invisible to auto-engage
+        if (this.isDisguisedSpy(enemy)) {
+          continue;
+        }
+
+        // Submarine stealth: skip submerged enemy submarines (invisible unless attacking)
+        if (this.isSubmergedSubmarine(enemy)) {
+          continue;
+        }
+
+        // Naval/land engagement feasibility: land units can't chase naval targets on water,
+        // naval units can't chase land targets on ground (but can attack if in range)
+        const enemyIsNaval = 'isNaval' in enemy && (enemy as Unit).isNaval;
+        const enemyIsOnLand = !enemyIsNaval && 'position' in enemy;
+        if (unit.isNaval && enemyIsOnLand) {
+          // Naval units can attack land targets if in range but shouldn't chase them
+          const dist = getDistance(unit.position, enemy.position);
+          if (dist >= attackRange) continue;
+        }
+        if (!unit.isNaval && enemyIsNaval) {
+          // Land units can attack naval targets if in range but shouldn't chase into water
+          const dist = getDistance(unit.position, enemy.position);
+          if (dist >= attackRange) continue;
+        }
+
         const dist = getDistance(unit.position, enemy.position);
 
         // AGGRESSIVE: chase enemies within vision range (AUTO_ENGAGE_RANGE)
@@ -101,6 +127,14 @@ export class AutoEngageSystem {
 
   private isDisguisedPhantom(entity: Unit | Building): boolean {
     return 'isDisguised' in entity && (entity as Unit).type === UnitType.PHANTOM && !!(entity as Unit).isDisguised;
+  }
+
+  private isSubmergedSubmarine(entity: Unit | Building): boolean {
+    return 'isSubmerged' in entity && (entity as Unit).type === UnitType.SUBMARINE && !!(entity as Unit).isSubmerged;
+  }
+
+  private isDisguisedSpy(entity: Unit | Building): boolean {
+    return 'isDisguised' in entity && (entity as Unit).type === UnitType.SPY && !!(entity as Unit).isDisguised;
   }
 
   private getEnemyUnitsAndBuildings(playerId: string, allPlayers: Player[]): (Unit | Building)[] {

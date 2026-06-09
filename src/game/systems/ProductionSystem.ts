@@ -1,5 +1,5 @@
-import type { Player, Unit, Faction, Vector2, UnitType, Building } from '../../types';
-import { Difficulty } from '../../types';
+import type { Player, Unit, Faction, Vector2, Building } from '../../types';
+import { Difficulty, UnitState, UnitType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { AI_CONFIG } from '../config/AIConfig';
 import { gameEventBus } from './GameEventBus';
@@ -11,14 +11,19 @@ export class ProductionSystem {
    * Find a valid spawn position around a building.
    * Tries the default position first, then searches in expanding rings.
    */
-  private findSpawnPosition(building: Building, player: Player): Vector2 {
+  private findSpawnPosition(building: Building, player: Player, unitType?: UnitType): Vector2 {
     const tileSize = GAME_CONFIG.TILE_SIZE;
-    const defaultPos: Vector2 = building.rallyPoint
-      ? { ...building.rallyPoint }
-      : { x: building.position.x + building.width * tileSize, y: building.position.y };
+    // Always spawn next to the building, not at the rally point
+    const defaultPos: Vector2 = { x: building.position.x + building.width * tileSize, y: building.position.y };
 
-    // Check if default position is walkable and not overlapping another unit
-    if (mapManager.isWalkableAtPosition(defaultPos.x, defaultPos.y) && !this.isUnitAtPosition(defaultPos, player)) {
+    // Naval units need water tiles, land units need walkable tiles
+    const isNavalUnit = unitType ? this.isNavalUnitType(unitType) : false;
+    const isValidPos = isNavalUnit
+      ? (pos: Vector2) => mapManager.isWaterAtPosition(pos.x, pos.y) && !this.isUnitAtPosition(pos, player)
+      : (pos: Vector2) => mapManager.isWalkableAtPosition(pos.x, pos.y) && !this.isUnitAtPosition(pos, player);
+
+    // Check if default position is valid
+    if (isValidPos(defaultPos)) {
       return defaultPos;
     }
 
@@ -32,7 +37,7 @@ export class ProductionSystem {
         for (let dy = -radius; dy <= radius; dy++) {
           if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue; // Only check the ring edge
           const candidate: Vector2 = { x: centerX + dx * step, y: centerY + dy * step };
-          if (mapManager.isWalkableAtPosition(candidate.x, candidate.y) && !this.isUnitAtPosition(candidate, player)) {
+          if (isValidPos(candidate)) {
             return candidate;
           }
         }
@@ -41,6 +46,10 @@ export class ProductionSystem {
 
     // Fallback: return default position even if blocked
     return defaultPos;
+  }
+
+  private isNavalUnitType(type: UnitType): boolean {
+    return type === UnitType.DESTROYER || type === UnitType.SUBMARINE || type === UnitType.TRANSPORT_SHIP;
   }
 
   private isUnitAtPosition(pos: Vector2, player: Player): boolean {
@@ -101,8 +110,14 @@ export class ProductionSystem {
               }
               continue;
             }
-            const spawnPos = this.findSpawnPosition(building, player);
-            player.units.push(createUnit(building.producingUnit, building.faction, spawnPos));
+            const spawnPos = this.findSpawnPosition(building, player, building.producingUnit);
+            const newUnit = createUnit(building.producingUnit, building.faction, spawnPos);
+            // If building has a rally point, move the unit there
+            if (building.rallyPoint) {
+              newUnit.state = UnitState.MOVING;
+              newUnit.waypoints = [{ ...building.rallyPoint }];
+            }
+            player.units.push(newUnit);
             player.statistics.unitsProduced++;
             gameEventBus.emit('unit:produced', { unitType: building.producingUnit, faction: building.faction, position: spawnPos });
             building.producingUnit = null;
@@ -124,7 +139,8 @@ export class ProductionSystem {
       }
 
       // Gradual repair: if building is flagged for repair, heal over time and deduct money
-      if (building.isRepairing && building.health < building.maxHealth && building.isConstructed) {
+      const isEmpDisabled = building.empDisabledUntil && building.empDisabledUntil > useGameStore.getState().gameTime;
+      if (building.isRepairing && building.health < building.maxHealth && building.isConstructed && !isEmpDisabled) {
         const repairRate = building.maxHealth * 0.05; // 5% per second
         const repairThisFrame = deltaTime * repairRate;
         const costThisFrame = repairThisFrame * GAME_CONFIG.REPAIR_COST_PER_HP;

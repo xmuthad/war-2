@@ -60,11 +60,12 @@ export class MovementSystem {
     // Skip units inside a transport
     if (unit.transportId) return;
 
-    // Skip CHRONO units that are chrono-shifting or on cooldown
-    if (unit.type === UnitType.CHRONO && (unit.isChronoShifting || unit.isChronoCooldown)) return;
+    // Skip CHRONO units that are currently chrono-shifting (cooldown is ok - they can move normally)
+    if (unit.type === UnitType.CHRONO && unit.isChronoShifting) return;
 
     switch (unit.state) {
       case UnitState.MOVING:
+      case UnitState.RETREATING:
         this.updateMoving(unit, deltaTime);
         break;
       case UnitState.PATROLLING:
@@ -82,10 +83,10 @@ export class MovementSystem {
 
   updateWithAvoidance(unit: Unit, allUnits: Unit[], deltaTime: number): void {
     if (unit.transportId) return;
-    if (unit.type === UnitType.CHRONO && (unit.isChronoShifting || unit.isChronoCooldown)) return;
+    if (unit.type === UnitType.CHRONO && unit.isChronoShifting) return;
 
     // Stuck detection: if unit hasn't moved significantly, clear its path
-    if (unit.state === UnitState.MOVING || unit.state === UnitState.ATTACKING) {
+    if (unit.state === UnitState.MOVING || unit.state === UnitState.ATTACKING || unit.state === UnitState.RETREATING) {
       const gameTime = useGameStore.getState().gameTime;
       const lastCheck = this.stuckCheckPositions.get(unit.id);
       if (!lastCheck) {
@@ -100,7 +101,7 @@ export class MovementSystem {
           if (unit.isAttackMoving) {
             unit.state = UnitState.GUARDING;
             unit.isAttackMoving = false;
-          } else if (unit.state === UnitState.MOVING) {
+          } else if (unit.state === UnitState.MOVING || unit.state === UnitState.RETREATING) {
             unit.state = UnitState.IDLE;
           }
         }
@@ -110,6 +111,7 @@ export class MovementSystem {
 
     switch (unit.state) {
       case UnitState.MOVING:
+      case UnitState.RETREATING:
         this.updateMovingWithAvoidance(unit, allUnits, deltaTime);
         break;
       case UnitState.PATROLLING:

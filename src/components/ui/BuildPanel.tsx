@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore, UNIT_UPGRADE_REQUIREMENTS } from '../../store/gameStore';
 import { BuildingType, UnitType, BuildingData, UnitData, UpgradeType, getFactionGroup } from '../../types';
 import { BUILDINGS_BY_FACTION, UNITS_BY_FACTION } from '../../game/systems/AIUnitLookup';
@@ -22,6 +22,7 @@ export const BuildPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('buildings');
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [flashItem, setFlashItem] = useState<string | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [buildingCategory, setBuildingCategory] = useState<BuildingCategory>('all');
   const currentPlayer = useGameStore(s => s.currentPlayer);
   const selectedBuilding = useGameStore(s => s.selectedBuilding);
@@ -47,6 +48,13 @@ export const BuildPanel: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Cleanup flash timers on unmount
+  useEffect(() => {
+    return () => {
+      flashTimerRef.current.forEach(t => clearTimeout(t));
+    };
   }, []);
 
   if (!currentPlayer) return null;
@@ -114,7 +122,8 @@ export const BuildPanel: React.FC = () => {
 
     // Visual flash feedback
     setFlashItem(unitType);
-    setTimeout(() => setFlashItem(null), 300);
+    const timer = setTimeout(() => setFlashItem(null), 300);
+    flashTimerRef.current.push(timer);
 
     // Audio feedback
     gameEventBus.emit('sound:play', { key: 'uiClick' });

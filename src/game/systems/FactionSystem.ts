@@ -522,15 +522,6 @@ export class FactionSystem {
 }
 
 /**
- * Factory function to create a FactionSystem instance
- * @param faction - The faction to create the system for
- * @returns New FactionSystem instance
- */
-export function createFactionSystem(faction: Faction): FactionSystem {
-  return new FactionSystem(faction);
-}
-
-/**
  * Gets the display name for a faction
  * @param faction - Faction to get name for
  * @returns Display name
@@ -555,25 +546,6 @@ export function getFactionColor(faction: Faction): string {
  */
 export function getFactionSecondaryColor(faction: Faction): string {
   return FACTION_INFO[faction].secondaryColor;
-}
-
-/**
- * Gets the description for a faction
- * @param faction - Faction to get description for
- * @returns Faction description
- */
-export function getFactionDescription(faction: Faction): string {
-  return FACTION_INFO[faction].description;
-}
-
-/**
- * Gets the special ability name for a faction
- * @param faction - Faction to get ability name for
- * @returns Special ability name or '无特殊能力'
- */
-export function getFactionSpecialAbilityName(faction: Faction): string {
-  const ability = FACTION_SPECIAL_ABILITIES[faction];
-  return ability?.name || '无特殊能力';
 }
 
 /**

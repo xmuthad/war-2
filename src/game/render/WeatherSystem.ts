@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-export type WeatherType = 'clear' | 'rain' | 'snow' | 'fog' | 'storm' | 'sandstorm';
+export type WeatherType = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog' | 'storm' | 'sandstorm';
 
 export interface WeatherConfig {
   type: WeatherType;
@@ -16,6 +16,12 @@ export const WEATHER_CONFIGS: Record<WeatherType, Omit<WeatherConfig, 'duration'
     intensity: 0,
     windDirection: 0,
     windSpeed: 0
+  },
+  cloudy: {
+    type: 'cloudy',
+    intensity: 0.3,
+    windDirection: 180,
+    windSpeed: 3
   },
   rain: {
     type: 'rain',
@@ -95,6 +101,12 @@ export class WeatherSystem {
     const intensity = this.currentWeather.intensity;
 
     switch (this.currentWeather.type) {
+      case 'cloudy':
+        if (this.weatherOverlay) {
+          this.weatherOverlay.setFillStyle(0x888899, intensity * 0.15);
+        }
+        break;
+
       case 'rain':
         this.createRainParticles(intensity);
         if (this.weatherOverlay) {

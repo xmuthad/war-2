@@ -50,7 +50,6 @@ export interface AIUnit {
   data?: {
     canAttack?: boolean;
     canHarvest?: boolean;
-    canBuild?: boolean;
     canCapture?: boolean;
   };
 }

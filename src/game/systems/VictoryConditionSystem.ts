@@ -36,9 +36,10 @@ export class VictoryConditionSystem {
       drawAvailable: false,
     };
 
-    // Check player defeat - player loses when ALL buildings are destroyed
+    // Check player defeat - player loses when ALL buildings AND units are destroyed
     const hasAnyBuilding = currentPlayer.buildings.some(b => b.isConstructed);
-    if (!hasAnyBuilding) {
+    const hasAnyUnit = currentPlayer.units.length > 0;
+    if (!hasAnyBuilding && !hasAnyUnit) {
       result.playerDefeated = true;
       return result;
     }

@@ -335,6 +335,26 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       })
     );
 
+    // Show damage numbers and bullet trails on combat hits
+    this.eventUnsubscribers.push(
+      gameEventBus.on('combat:hit', (event) => {
+        const data = event.data as { attackerId: string; damage: number; position: { x: number; y: number } } | undefined;
+        if (data && data.damage > 0) {
+          this.showDamageNumber(data.damage, data.position.x, data.position.y);
+
+          // Draw bullet trail from attacker to target
+          if (this.effectSystem && data.attackerId) {
+            const attackerPos = this.findUnitOrBuildingPosition(data.attackerId);
+            if (attackerPos) {
+              const { x: startX, y: startY } = logicalToRender(attackerPos.x, attackerPos.y);
+              const { x: endX, y: endY } = logicalToRender(data.position.x, data.position.y);
+              this.effectSystem.playBulletTrail(startX, startY, endX, endY);
+            }
+          }
+        }
+      })
+    );
+
     // Emit event so usePhaser knows scene is ready
     this.events.emit('sceneReady');
   }
@@ -351,7 +371,11 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       this.handleHotkeyAction(action);
     });
 
-    this.groupManager.onGroupChange((_groupId, _unitIds) => {
+    this.groupManager.onGroupChange((groupId, unitIds) => {
+      // Update group badges for units in this group
+      for (const unitId of unitIds) {
+        this.setUnitGroupBadge(unitId, groupId);
+      }
     });
   }
 
@@ -594,6 +618,7 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       this.updateDynamicObstacles();
     }
     this.updateSoundCameraPosition();
+    this.soundManager?.update(time);
     this.updateFogOfWar(time);
   }
 
@@ -1155,7 +1180,17 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
   dispose(): void {
     this.isDestroyed = true;
 
-    this.unitSprites.forEach(sprite => sprite.destroy());
+    // Stop all active tweens to prevent callbacks on destroyed objects
+    this.tweens.killAll();
+
+    // Clean up rankGlowGraphics attached to unit sprites
+    this.unitSprites.forEach(sprite => {
+      const glow = sprite.getData('rankGlowGraphics');
+      if (glow) {
+        (glow as Phaser.GameObjects.Arc).destroy();
+      }
+      sprite.destroy();
+    });
     this.buildingSprites.forEach(sprite => sprite.destroy());
     this.unitHealthBars.forEach(graphics => graphics.destroy());
     this.buildingHealthBars.forEach(graphics => graphics.destroy());
@@ -1182,6 +1217,10 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.crateGraphics = undefined;
     this.waypointGraphics?.destroy();
     this.waypointGraphics = undefined;
+    this.terrainImage?.destroy();
+    this.terrainImage = null;
+    this.terrainTexture?.destroy();
+    this.terrainTexture = null;
 
     this.eventUnsubscribers.forEach(unsub => unsub());
     this.eventUnsubscribers = [];
@@ -1298,7 +1337,11 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     for (const building of player.buildings) {
       const tileX = Math.floor(building.position.x / GAME_CONFIG.TILE_SIZE);
       const tileY = Math.floor(building.position.y / GAME_CONFIG.TILE_SIZE);
-      this.fogOfWar.addObserver(tileX, tileY, GAME_CONFIG.BUILDING_VISION_RADIUS * visionModifier);
+      // Radar buildings provide extended vision
+      const visionRadius = building.type === BuildingType.RADAR
+        ? GAME_CONFIG.BUILDING_VISION_RADIUS * 2
+        : GAME_CONFIG.BUILDING_VISION_RADIUS;
+      this.fogOfWar.addObserver(tileX, tileY, visionRadius * visionModifier);
     }
 
     this.fogOfWar.update(time);
@@ -1979,6 +2022,54 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       this.buildingStates.set(id, { ...state, health, maxHealth, oreStorage, maxOreStorage });
       this.healthBarsDirty = true;
     }
+  }
+
+  private findUnitOrBuildingPosition(entityId: string): { x: number; y: number } | null {
+    const state = useGameStore.getState();
+    const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
+    for (const player of allPlayers) {
+      const unit = player.units.find(u => u.id === entityId);
+      if (unit) return { ...unit.position };
+      const building = player.buildings.find(b => b.id === entityId);
+      if (building) return { x: building.position.x + (building.width || 2) * GAME_CONFIG.TILE_SIZE / 2, y: building.position.y + (building.height || 2) * GAME_CONFIG.TILE_SIZE / 2 };
+    }
+    return null;
+  }
+
+  private showDamageNumber(damage: number, worldX: number, worldY: number): void {
+    if (this.isDestroyed) return;
+
+    // Check user setting
+    const settings = useGameStore.getState().gameSettings;
+    if (settings && 'showDamageNumbers' in settings && !settings.showDamageNumbers) return;
+
+    // Project logical position to render space
+    const { x: renderX, y: renderY } = logicalToRender(worldX, worldY);
+
+    const textObj = this.add.text(renderX, renderY - 10, `-${damage}`, {
+      fontSize: '14px',
+      color: '#ff4444',
+      fontFamily: 'Arial Black',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    textObj.setOrigin(0.5, 0.5);
+    textObj.setDepth(901);
+
+    const offsetX = (Math.random() - 0.5) * 20;
+    this.tweens.add({
+      targets: textObj,
+      y: renderY - 50,
+      x: renderX + offsetX,
+      alpha: 0,
+      scale: 0.8,
+      duration: 1200,
+      ease: 'Power2',
+      onComplete: () => {
+        if (!this.scene?.isActive()) return;
+        textObj.destroy();
+      },
+    });
   }
 
   private updateCameraControls(delta: number): void {

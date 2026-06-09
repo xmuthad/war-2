@@ -361,6 +361,17 @@
   background: linear-gradient(90deg, #ff6622, #ff9944);
 }
 
+.superweapon-ready {
+  color: #00ff88;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+}
+
+.superweapon-charge {
+  color: #ff9944;
+  font-weight: 600;
+}
+
 .special-ability {
   margin-top: var(--spacing-xs);
   padding: 4px;

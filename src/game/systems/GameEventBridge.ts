@@ -1,5 +1,6 @@
 import { GameSoundManager } from './GameSoundManager';
 import { EffectSystem } from '../render/EffectSystem';
+import { logicalToRender } from '../render/IsometricUtils';
 import { gameEventBus, GameEvent, GameEventType } from './GameEventBus';
 import { gameUIController } from '../ui/GameUIController';
 import { UNITS_BY_FACTION } from './AIUnitLookup';
@@ -24,7 +25,6 @@ const SOUND_EVENT_MAP: Partial<Record<GameEventType, string>> = {
   'combat:emp': 'empAttack',
   'game:victory': 'upgradeComplete',
   'game:defeat': 'alert',
-  'game:alert': 'alert',
   'alert:lowPower': 'lowPower',
   'alert:baseUnderAttack': 'baseUnderAttack',
   'power:low': 'lowPower',
@@ -72,6 +72,7 @@ export class GameEventBridge {
   }
 
   private handleNotification(event: GameEvent): void {
+    if (!this.scene) return;
     switch (event.type) {
       case 'unit:produced': {
         const unitType = event.data?.unitType as UnitType | undefined;
@@ -315,13 +316,13 @@ export class GameEventBridge {
       this.soundManager.playRandomVoice('command');
     } else if (event.type === 'unit:destroyed') {
       this.soundManager.playRandomVoice('death');
-    } else if (event.type === 'game:alert' || event.type === 'power:low' || event.type === 'alert:lowPower' || event.type === 'alert:baseUnderAttack') {
+    } else if (event.type === 'power:low' || event.type === 'alert:lowPower' || event.type === 'alert:baseUnderAttack') {
       this.soundManager.playRandomVoice('help');
     }
   }
 
   private handleEffectEvent(event: GameEvent): void {
-    if (!this.effectSystem) return;
+    if (!this.scene || !this.effectSystem) return;
 
     const position = event.data?.position as { x: number; y: number } | undefined;
     if (!position) return;
@@ -399,9 +400,32 @@ export class GameEventBridge {
       case 'building:destroyed':
         this.scene.shakeCamera(0.005, 250);
         break;
-      case 'superweapon:activated':
-        this.scene.shakeCamera(0.01, 500);
+      case 'superweapon:activated': {
+        const swType = event.data?.type as string | undefined;
+        const swPosition = event.data?.position as { x: number; y: number } | undefined;
+        // Visual effects for each superweapon type
+        if (this.effectSystem && swPosition) {
+          const { x: rx, y: ry } = logicalToRender(swPosition.x, swPosition.y);
+          if (swType === 'nuclear_silo') {
+            // Nuclear explosion: large explosion effect
+            this.effectSystem.playExplosion(rx, ry, 2.0);
+            this.scene.shakeCamera(0.02, 800);
+          } else if (swType === 'iron_curtain') {
+            // Iron Curtain: explosion effect at target (represents invulnerability field)
+            this.effectSystem.playExplosion(rx, ry, 1.0);
+            this.scene.shakeCamera(0.008, 400);
+          } else if (swType === 'chronosphere') {
+            // Chronosphere: explosion effect at source
+            this.effectSystem.playExplosion(rx, ry, 1.0);
+            this.scene.shakeCamera(0.008, 400);
+          } else {
+            this.scene.shakeCamera(0.01, 500);
+          }
+        } else {
+          this.scene.shakeCamera(0.01, 500);
+        }
         break;
+      }
       case 'combat:hit': {
         const targetIsBuilding = event.data?.targetIsBuilding as boolean | undefined;
         if (targetIsBuilding) {

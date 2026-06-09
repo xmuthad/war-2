@@ -602,6 +602,53 @@ function generateSniper(faction) {
   return canvas;
 }
 
+function generateSpy(faction) {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 24);
+      const legAnim = Math.sin(frame * Math.PI/2) * 2;
+
+      // 间谍穿深色西装
+      drawRect(ctx, -10, 8+legAnim, 8, 14, [30, 30, 40], 0, 0);
+      drawRect(ctx, 2, 8-legAnim, 8, 14, [30, 30, 40], 0, 0);
+      drawRect(ctx, -10, 20+legAnim, 8, 6, [20, 20, 25], 0, 0);
+      drawRect(ctx, 2, 20-legAnim, 8, 6, [20, 20, 25], 0, 0);
+
+      // 西装外套
+      drawRect(ctx, -12, -4, 24, 16, [25, 25, 35], 0, 0);
+      drawRect(ctx, -2, -2, 4, 14, [200, 200, 200], 0, 0); // 白衬衫领口
+      drawRect(ctx, -12, 8, 24, 4, [20, 20, 30], 0, 0);
+
+      // 头部
+      drawRect(ctx, -6, -14, 12, 12, COLORS.common.skin, 0, 0);
+      // 墨镜
+      drawRect(ctx, -6, -10, 12, 4, [10, 10, 10], 0, 0);
+      // 头发
+      drawRect(ctx, -7, -18, 14, 6, [20, 20, 20], 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
 function generateTanya() {
   const width = SPRITE_SIZE * FRAMES;
   const height = SPRITE_SIZE * DIRECTIONS;
@@ -1359,6 +1406,7 @@ async function main() {
   saveCanvas(generateSoldier('soviet'), path.join(outDir, 'units/soviet_ivan.png'));
   saveCanvas(generateSniper('allied'), path.join(outDir, 'units/allied_seal.png'));
   saveCanvas(generateSoldier('allied'), path.join(outDir, 'units/allied_chrono.png'));
+  saveCanvas(generateSpy('allied'), path.join(outDir, 'units/allied_spy.png'));
   saveCanvas(generateHelicopter('allied'), path.join(outDir, 'units/allied_blackhawk.png'));
   saveCanvas(generateHelicopter('soviet'), path.join(outDir, 'units/soviet_kirov.png'));
   saveCanvas(generateHelicopter('soviet'), path.join(outDir, 'units/soviet_yak.png'));

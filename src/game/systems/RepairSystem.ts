@@ -83,16 +83,20 @@ export class RepairSystem {
         unit.health = Math.min(unit.maxHealth, unit.health + repairThisFrame);
         player.money -= costThisFrame;
       } else {
-        unit.isRepairingAtFactory = false; // Can't afford
+        // Can't afford — stop repairing and return to idle
+        unit.state = UnitState.IDLE;
+        unit.isRepairingAtFactory = false;
+        return;
       }
 
       if (unit.health >= unit.maxHealth) {
         unit.health = unit.maxHealth;
-        unit.isRepairingAtFactory = false;
-        // Move unit away from factory
+        // Set state first, then clear flag to avoid inconsistent intermediate state
         unit.state = UnitState.IDLE;
+        unit.isRepairingAtFactory = false;
       }
     } else {
+      unit.state = UnitState.IDLE;
       unit.isRepairingAtFactory = false;
     }
   }

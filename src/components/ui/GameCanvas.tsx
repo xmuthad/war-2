@@ -98,6 +98,11 @@ export const GameCanvas: React.FC = () => {
             scene.setUnitVisible(unit.id, false);
             return;
           }
+          // Submerged enemy submarines are invisible even in visible tiles
+          if (unit.isSubmerged) {
+            scene.setUnitVisible(unit.id, false);
+            return;
+          }
           scene.setUnitVisible(unit.id, true);
         }
         // Units inside a transport should be hidden and skip position updates
@@ -118,7 +123,7 @@ export const GameCanvas: React.FC = () => {
           scene.setUnitInvulnerable(unit.id, !!unit.isInvulnerable);
         }
         scene.setUnitRank(unit.id, unit.rank);
-        if (unit.type === UnitType.PHANTOM) {
+        if (unit.type === UnitType.PHANTOM || unit.type === UnitType.SPY) {
           scene.setUnitDisguised(unit.id, unit.isDisguised || false);
         }
         if (unit.type === UnitType.CHRONO) {

@@ -183,6 +183,21 @@ export class PathfindingGrid {
               case TileType.ORE:
                 cost = 2.0;
                 break;
+              case TileType.SAND:
+                cost = 1.3;
+                break;
+              case TileType.ICE:
+                cost = 0.8;
+                break;
+              case TileType.MUD:
+                cost = 2.0;
+                break;
+              case TileType.RUBBLE:
+                cost = 1.5;
+                break;
+              case TileType.CRATER:
+                cost = 1.5;
+                break;
               default:
                 cost = 1.0;
             }

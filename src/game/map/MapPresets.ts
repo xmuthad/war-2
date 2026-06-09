@@ -295,9 +295,19 @@ function createRiverMap(width: number, height: number): GameMapData {
     }
   }
 
+  // Bridge 1: center of the map
   for (let y = Math.floor(height / 2) - 1; y <= Math.floor(height / 2) + 1; y++) {
     const bridgeX = riverCenterX + Math.floor(Math.sin(y * 0.3) * 2);
     if (bridgeX >= 0 && bridgeX < width) {
+      tiles[y][bridgeX] = makeTile(TileType.ROAD);
+    }
+  }
+
+  // Bridge 2: upper quarter of the map
+  const bridge2Y = Math.floor(height / 4);
+  for (let y = bridge2Y - 1; y <= bridge2Y + 1; y++) {
+    const bridgeX = riverCenterX + Math.floor(Math.sin(y * 0.3) * 2);
+    if (bridgeX >= 0 && bridgeX < width && y >= 0 && y < height) {
       tiles[y][bridgeX] = makeTile(TileType.ROAD);
     }
   }
@@ -474,16 +484,50 @@ function createIslandMap(width: number, height: number): GameMapData {
     }
   }
 
+  const spawn1 = { x: Math.floor(width / 4) - 2, y: Math.floor(height / 4) - 2 };
+  const spawn2 = { x: Math.floor(width * 3 / 4) - 2, y: Math.floor(height * 3 / 4) - 2 };
+
+  // Ensure water tiles near each spawn point so naval buildings (shipyard) can be placed.
+  // Place water along the island edge closest to the map center for each spawn.
+  for (const spawn of [spawn1, spawn2]) {
+    const islandCx = spawn.x + 2;
+    const islandCy = spawn.y + 2;
+    // Find the edge of the island in the direction toward the map center
+    const mapCx = width / 2;
+    const mapCy = height / 2;
+    const dx = mapCx - islandCx;
+    const dy = mapCy - islandCy;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ndx = len > 0 ? dx / len : 1;
+    const ndy = len > 0 ? dy / len : 0;
+
+    // Walk from spawn toward map center to find the coast, then add a water strip
+    for (let step = 3; step < islandRadius + 4; step++) {
+      const cx = Math.floor(islandCx + ndx * step);
+      const cy = Math.floor(islandCy + ndy * step);
+      if (cx >= 0 && cx < width && cy >= 0 && cy < height && tiles[cy][cx].type === TileType.WATER) {
+        // Found water — ensure a 2x3 water patch here for shipyard placement
+        for (let wy = -1; wy <= 1; wy++) {
+          for (let wx = 0; wx <= 1; wx++) {
+            const nx = cx + wx;
+            const ny = cy + wy;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              tiles[ny][nx] = makeTile(TileType.WATER);
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
   return {
     id: generateId(),
     name: '岛屿地图',
     width,
     height,
     tiles,
-    spawnPoints: [
-      { x: Math.floor(width / 4) - 2, y: Math.floor(height / 4) - 2 },
-      { x: Math.floor(width * 3 / 4) - 2, y: Math.floor(height * 3 / 4) - 2 },
-    ],
+    spawnPoints: [spawn1, spawn2],
     resourceNodes,
   };
 }

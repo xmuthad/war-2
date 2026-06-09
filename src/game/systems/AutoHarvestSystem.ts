@@ -1,4 +1,4 @@
-import { Player, Unit, UnitState, GameMapData, UpgradeType, Building, BuildingType } from '../../types';
+import { Player, Unit, UnitState, GameMapData, UpgradeType, Building, BuildingType, ResourceNode } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { gameEventBus } from './GameEventBus';
 
@@ -43,6 +43,8 @@ export class AutoHarvestSystem {
       if (nearestResource) {
         unit.state = UnitState.HARVESTING;
         unit.target = nearestResource.id;
+        unit.harvestTarget = nearestResource;
+        unit.waypoints = [{ x: nearestResource.position.x * GAME_CONFIG.TILE_SIZE, y: nearestResource.position.y * GAME_CONFIG.TILE_SIZE }];
         assignedResourceIds.add(nearestResource.id);
       }
     }
@@ -83,6 +85,8 @@ export class AutoHarvestSystem {
         if (nearestResource) {
           unit.state = UnitState.HARVESTING;
           unit.target = nearestResource.id;
+          unit.harvestTarget = nearestResource;
+          unit.waypoints = [{ x: nearestResource.position.x * GAME_CONFIG.TILE_SIZE, y: nearestResource.position.y * GAME_CONFIG.TILE_SIZE }];
         } else {
           unit.state = UnitState.IDLE;
           unit.target = null;
@@ -109,10 +113,10 @@ export class AutoHarvestSystem {
     return nearest;
   }
 
-  private findNearestResource(pos: { x: number; y: number }, map: GameMapData, excludeIds?: Set<string>): { id: string } | null {
+  private findNearestResource(pos: { x: number; y: number }, map: GameMapData, excludeIds?: Set<string>): ResourceNode | null {
     if (!map.resourceNodes || map.resourceNodes.length === 0) return null;
 
-    let nearest: { id: string } | null = null;
+    let nearest: ResourceNode | null = null;
     let nearestDist = Infinity;
     for (const r of map.resourceNodes) {
       if (r.amount <= 0) continue;
@@ -122,7 +126,7 @@ export class AutoHarvestSystem {
       const dist = getDistance(pos, { x: worldX, y: worldY });
       if (dist < nearestDist) {
         nearestDist = dist;
-        nearest = { id: r.id };
+        nearest = r;
       }
     }
     return nearest;

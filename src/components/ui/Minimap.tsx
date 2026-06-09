@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { TileType, BuildingType, Building, Unit } from '../../types';
+import { TileType, BuildingType, Building, Unit, UnitType } from '../../types';
 import { GAME_CONFIG } from '../../game/config/GameConfig';
 import { TILE_INFO } from '../../game/config/TerrainConfig';
 import { gameEventBus } from '../../game/systems/GameEventBus';
@@ -197,7 +197,10 @@ export const Minimap: React.FC = () => {
         const pos = worldToMinimap(unit.position.x, unit.position.y);
         const radius = Math.max(1.5, 2.5 * scaleX * GAME_CONFIG.TILE_SIZE);
 
-        ctx.fillStyle = isAlly
+        // Disguised spies appear as friendly to enemies on the minimap
+        const appearsAlly = isAlly || (unit.type === UnitType.SPY && unit.isDisguised);
+
+        ctx.fillStyle = appearsAlly
           ? (unit.isSelected ? '#ffd700' : '#44ff44')
           : enemyColor;
 
@@ -367,11 +370,14 @@ export const Minimap: React.FC = () => {
     return unsub;
   }, []);
 
-  // Cleanup RAF on unmount
+  // Cleanup RAF and timers on unmount
   useEffect(() => {
     return () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
+      }
+      for (const timer of pingTimersRef.current) {
+        clearTimeout(timer);
       }
     };
   }, []);
@@ -396,6 +402,7 @@ export const Minimap: React.FC = () => {
   }, [minimapToWorld]);
 
   const pingIdRef = useRef(0);
+  const pingTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const addPing = useCallback((position: { x: number; y: number }) => {
     const pingId = ++pingIdRef.current;
     const newPing = { x: position.x, y: position.y, id: pingId, time: Date.now() };
@@ -403,9 +410,10 @@ export const Minimap: React.FC = () => {
     // Emit ping event for main game view
     gameEventBus.emit('map:ping', { position: { x: position.x, y: position.y } });
     // Remove ping after 3 seconds
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setPings(prev => prev.filter(p => p.id !== pingId));
     }, 3000);
+    pingTimersRef.current.push(timer);
   }, []);
 
   const handleMinimapAltClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {

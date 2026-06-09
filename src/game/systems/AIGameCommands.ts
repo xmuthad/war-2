@@ -117,7 +117,7 @@ export function createGameCommands(faction: Faction): GameCommands {
 
     retreatUnit(unitId: string, position: Vector2): void {
       const store = getStore();
-      store.moveUnit(unitId, position);
+      store.setUnitWaypoints(unitId, [position], UnitState.RETREATING);
     },
 
     produceUnit(buildingId: string, unitType?: UnitType): void {
@@ -273,7 +273,11 @@ export function createGameCommands(faction: Faction): GameCommands {
 
     sellBuilding: (buildingId: string): void => {
       const store = getStore();
-      store.sellBuildingForPlayer(store.aiPlayers[0]?.id || '', buildingId);
+      const allPlayers = [store.currentPlayer, ...store.aiPlayers].filter(Boolean);
+      const owner = allPlayers.find(p => p.buildings.some(b => b.id === buildingId));
+      if (owner) {
+        store.sellBuildingForPlayer(owner.id, buildingId);
+      }
     },
   };
 }

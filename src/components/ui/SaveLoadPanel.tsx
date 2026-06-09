@@ -81,15 +81,32 @@ export const SaveLoadPanel: React.FC<SaveLoadPanelProps> = ({
       gameTime: storeState.gameTime,
       faction: storeState.currentPlayer?.faction ?? 'usa' as never,
       difficulty: storeState.aiPlayers[0]?.difficulty ?? Difficulty.NORMAL,
-      currentPlayer: storeState.currentPlayer!,
+      currentPlayer: storeState.currentPlayer,
       aiPlayers: storeState.aiPlayers,
-      map: storeState.map!,
+      map: storeState.map,
       gameState: storeState.gameState,
       neutralBuildings: storeState.neutralBuildings,
+      gameSettings: storeState.gameSettings,
     };
 
     try {
-      const success = saveManager.saveGame(selectedSlot.id, name, saveData);
+      // Capture thumbnail from game canvas
+      let thumbnail: string | null = null;
+      try {
+        const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+        if (canvas) {
+          const thumbCanvas = document.createElement('canvas');
+          thumbCanvas.width = 160;
+          thumbCanvas.height = 90;
+          const ctx = thumbCanvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(canvas, 0, 0, 160, 90);
+            thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.5);
+          }
+        }
+      } catch { /* thumbnail capture is optional */ }
+
+      const success = saveManager.saveGame(selectedSlot.id, name, saveData, thumbnail);
       if (success) {
         loadSlots();
         setNewSaveName('');

@@ -180,6 +180,23 @@ export enum UnitType {
   DESTROYER = 'destroyer',
   SUBMARINE = 'submarine',
   TRANSPORT_SHIP = 'transport_ship',
+  SPY = 'spy',
+  // New RA2 units
+  MCV = 'mcv',
+  ATTACK_DOG = 'attack_dog',
+  WAR_MINER = 'war_miner',
+  MIRAGE = 'mirage',
+  GRIZZLY = 'grizzly',
+  LASH = 'lash',
+  DREADNOUGHT = 'dreadnought',
+  AEGIS = 'aegis',
+  GI = 'gi',
+  GUARDIAN_GI = 'guardian_gi',
+  BRUTE = 'brute',
+  DISC = 'disc',
+  BOOMER = 'boomer',
+  GATTLING_TANK = 'gattling_tank',
+  SLAVE_MINER = 'slave_miner',
 }
 
 export enum BuildingType {
@@ -204,6 +221,18 @@ export enum BuildingType {
   IRON_CURTAIN = 'iron_curtain',
   CHRONOSPHERE = 'chronosphere',
   NAVAL_SHIPYARD = 'naval_shipyard',
+  // New RA2 buildings
+  PATRIOT = 'patriot',
+  SENTRY_GUN = 'sentry_gun',
+  BATTLE_BUNKER = 'battle_bunker',
+  CLONING_VATS = 'cloning_vats',
+  INDUSTRIAL_PLANT = 'industrial_plant',
+  PSYCHIC_SENSOR = 'psychic_sensor',
+  BIOLAB = 'biolab',
+  MACHINE_SHOP = 'machine_shop',
+  CIVILIAN_BUILDING = 'civilian_building',
+  BRIDGE = 'bridge',
+  BRIDGE_DESTROYED = 'bridge_destroyed',
 }
 
 export enum TileType {
@@ -219,6 +248,8 @@ export enum TileType {
   RUBBLE = 'rubble',
   CRATER = 'crater',
   CLIFF = 'cliff',
+  BRIDGE = 'bridge',
+  BRIDGE_DESTROYED = 'bridge_destroyed',
 }
 
 export enum UnitState {
@@ -232,6 +263,9 @@ export enum UnitState {
   PATROLLING = 'patrolling',
   GUARDING = 'guarding',
   CAPTURING = 'capturing',
+  RETREATING = 'retreating',
+  GARRISONING = 'garrisoning',
+  DEPLOYING = 'deploying',
 }
 
 export enum UnitStance {
@@ -296,10 +330,14 @@ export interface UnitData {
   canAttack?: boolean;
   canHarvest: boolean;
   canCapture: boolean;
-  canBuild?: boolean;
   special?: string;
   description?: string;
   maxPassengers?: number;
+  maxAmmo?: number;        // Aircraft ammo capacity; undefined = infinite ammo
+  canDeploy?: boolean;           // Can this unit deploy into a building (MCV)
+  deployBuildingType?: BuildingType; // What building type to deploy into
+  deployTime?: number;           // Time to deploy in seconds
+  canGarrison?: boolean;         // Can this unit garrison buildings
 }
 
 export interface BuildingData {
@@ -319,6 +357,13 @@ export interface BuildingData {
   attackRange?: number;
   attackSpeed?: number;
   superweaponChargeTime?: number;
+  // Garrison system
+  maxGarrison?: number;
+  isGarrisonable?: boolean;
+  // Bridge system
+  isBridge?: boolean;
+  // Height system
+  elevationLevel?: number;
 }
 
 export interface Tile {
@@ -326,6 +371,9 @@ export interface Tile {
   walkable: boolean;
   buildable: boolean;
   movementCost: number;
+  elevation?: number;           // Height level: 0=ground, 1=low cliff, 2=high cliff
+  isBridgeTile?: boolean;       // Is this tile part of a bridge
+  bridgeId?: string;            // ID of the bridge building this tile belongs to
 }
 
 export interface ResourceNode {
@@ -393,6 +441,7 @@ export interface Unit {
   passengers?: string[];
   maxPassengers?: number;
   isAttackMoving?: boolean;
+  attackTarget?: string | null;   // Target entity ID for attack-move
   stance?: UnitStance;
   chronoShiftTarget?: Vector2;    // Target position for chrono shift
   chronoShiftTimer?: number;      // Timer for charging (2s) and cooldown (5s)
@@ -401,6 +450,18 @@ export interface Unit {
   isRepairingAtFactory?: boolean; // Unit is being repaired at repair factory
   isInvulnerable?: boolean;       // Iron Curtain invulnerability
   invulnerableUntil?: number;     // Timestamp when invulnerability expires
+  isSubmerged?: boolean;         // Submarine stealth: submerged = invisible to enemies
+  ammo?: number;                 // Current ammo count for aircraft
+  isReturningToBase?: boolean;   // Aircraft returning to helipad/airfield to rearm
+  _buffUntil?: number;           // gameTime when attack buff expires
+  _debuffUntil?: number;         // gameTime when attack debuff expires
+  // Garrison system
+  garrisonedBuildingId?: string; // ID of building this unit is garrisoned in
+  // MCV deploy system
+  canDeploy?: boolean;           // Can this unit deploy into a building (MCV)
+  deployBuildingType?: BuildingType; // What building type to deploy into
+  isDeploying?: boolean;         // Currently deploying
+  deployTimer?: number;          // Time remaining for deployment
 }
 
 export enum UnitRank {
@@ -447,6 +508,16 @@ export interface Building {
   superweaponReady?: boolean;         // Is the superweapon ready to fire?
   oreStorage?: number;                // Ore stored at refinery
   maxOreStorage?: number;             // Max ore storage capacity
+  // Garrison system
+  garrisonedUnits?: string[];         // IDs of units garrisoned inside
+  maxGarrison?: number;               // Max units that can garrison
+  isGarrisonable?: boolean;           // Whether this building can be garrisoned
+  // Bridge system
+  isBridge?: boolean;                 // Is this a bridge building
+  isBridgeDestroyed?: boolean;        // Is the bridge destroyed
+  bridgeTilePositions?: Vector2[];    // Tile positions this bridge covers
+  // Height system
+  elevationLevel?: number;            // Building elevation (0=ground, 1=cliff top, etc.)
 }
 
 export interface BuildQueueItem {
@@ -486,6 +557,7 @@ export interface Player {
   isVictorious: boolean;
   teamId?: number;
   statistics: PlayerStatistics;
+  _tempSpySatelliteUntil?: number;  // gameTime when temporary spy satellite vision expires
 }
 
 export interface PlayerSlot {

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { gameEventBus } from './GameEventBus';
+import { UnitType, Vector2 } from '../../types';
 
 /**
  * Categories of sounds in the game
@@ -118,6 +119,690 @@ export const VOICE_LINES: Record<string, VoiceLine> = {
 };
 
 /**
+ * Voice events that units can trigger
+ * @public
+ */
+export enum UnitVoiceEvent {
+  SELECT = 'select',
+  MOVE = 'move',
+  ATTACK = 'attack',
+  UNDER_FIRE = 'under_fire',
+  LOW_HEALTH = 'low_health',
+  KILL = 'kill',
+  PROMOTED = 'promoted',
+  GARRISON = 'garrison',
+  UNGARRISON = 'ungarrison',
+  DEPLOY = 'deploy',
+  SPECIAL = 'special',
+  BUILT = 'built',
+}
+
+/**
+ * Helper to generate voice file paths for a unit type.
+ * Each event gets 2-3 variant files for variety.
+ * @internal
+ */
+function voiceFiles(unitType: string, event: UnitVoiceEvent, count: number = 2): string[] {
+  const files: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    files.push(`sounds/voice/${unitType}/${event}_${i}.mp3`);
+  }
+  return files;
+}
+
+/**
+ * Per-unit voice map: each UnitType maps to its voice events → sound file paths.
+ * Follows the pattern: sounds/voice/{unitType}/{event}_{variant}.mp3
+ * @public
+ */
+export const UNIT_VOICE_MAP: Record<UnitType, Record<UnitVoiceEvent, string[]>> = {
+  [UnitType.SOLDIER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('soldier', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('soldier', UnitVoiceEvent.MOVE, 3),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('soldier', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('soldier', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('soldier', UnitVoiceEvent.LOW_HEALTH, 2),
+    [UnitVoiceEvent.KILL]: voiceFiles('soldier', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('soldier', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('soldier', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('soldier', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('soldier', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('soldier', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('soldier', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.CONSCRIPT]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('conscript', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('conscript', UnitVoiceEvent.MOVE, 3),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('conscript', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('conscript', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('conscript', UnitVoiceEvent.LOW_HEALTH, 2),
+    [UnitVoiceEvent.KILL]: voiceFiles('conscript', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('conscript', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('conscript', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('conscript', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('conscript', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('conscript', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('conscript', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.ENGINEER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('engineer', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('engineer', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('engineer', UnitVoiceEvent.ATTACK),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('engineer', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('engineer', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('engineer', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('engineer', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('engineer', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('engineer', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('engineer', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('engineer', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('engineer', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.ROCKET]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('rocket', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('rocket', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('rocket', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('rocket', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('rocket', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('rocket', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('rocket', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('rocket', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('rocket', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('rocket', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('rocket', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('rocket', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.SNIPER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('sniper', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('sniper', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('sniper', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('sniper', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('sniper', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('sniper', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('sniper', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('sniper', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('sniper', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('sniper', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('sniper', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('sniper', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.TANYA]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('tanya', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('tanya', UnitVoiceEvent.MOVE, 3),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('tanya', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('tanya', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('tanya', UnitVoiceEvent.LOW_HEALTH, 2),
+    [UnitVoiceEvent.KILL]: voiceFiles('tanya', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('tanya', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('tanya', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('tanya', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('tanya', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('tanya', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('tanya', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.SEAL]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('seal', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('seal', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('seal', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('seal', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('seal', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('seal', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('seal', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('seal', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('seal', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('seal', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('seal', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('seal', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.TANK]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('tank', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('tank', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('tank', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('tank', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('tank', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('tank', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('tank', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('tank', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('tank', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('tank', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('tank', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('tank', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.RHINO]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('rhino', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('rhino', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('rhino', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('rhino', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('rhino', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('rhino', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('rhino', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('rhino', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('rhino', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('rhino', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('rhino', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('rhino', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.APOCALYPSE]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('apocalypse', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('apocalypse', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('apocalypse', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('apocalypse', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('apocalypse', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('apocalypse', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('apocalypse', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('apocalypse', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('apocalypse', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('apocalypse', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('apocalypse', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('apocalypse', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.TESLA]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('tesla', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('tesla', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('tesla', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('tesla', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('tesla', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('tesla', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('tesla', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('tesla', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('tesla', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('tesla', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('tesla', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('tesla', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.KIROV]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('kirov', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('kirov', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('kirov', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('kirov', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('kirov', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('kirov', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('kirov', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('kirov', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('kirov', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('kirov', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('kirov', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('kirov', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.PRISM]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('prism', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('prism', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('prism', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('prism', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('prism', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('prism', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('prism', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('prism', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('prism', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('prism', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('prism', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('prism', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.MCV]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('mcv', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('mcv', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('mcv', UnitVoiceEvent.ATTACK),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('mcv', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('mcv', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('mcv', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('mcv', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('mcv', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('mcv', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('mcv', UnitVoiceEvent.DEPLOY, 3),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('mcv', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('mcv', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.ATTACK_DOG]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('attack_dog', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('attack_dog', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('attack_dog', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('attack_dog', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('attack_dog', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('attack_dog', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('attack_dog', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('attack_dog', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('attack_dog', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('attack_dog', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('attack_dog', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('attack_dog', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.MINER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('miner', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('miner', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('miner', UnitVoiceEvent.ATTACK),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('miner', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('miner', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('miner', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('miner', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('miner', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('miner', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('miner', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('miner', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('miner', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.IFV]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('ifv', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('ifv', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('ifv', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('ifv', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('ifv', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('ifv', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('ifv', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('ifv', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('ifv', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('ifv', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('ifv', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('ifv', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.PHANTOM]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('phantom', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('phantom', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('phantom', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('phantom', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('phantom', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('phantom', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('phantom', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('phantom', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('phantom', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('phantom', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('phantom', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('phantom', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.HELICOPTER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('helicopter', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('helicopter', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('helicopter', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('helicopter', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('helicopter', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('helicopter', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('helicopter', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('helicopter', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('helicopter', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('helicopter', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('helicopter', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('helicopter', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.BLACKHAWK]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('blackhawk', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('blackhawk', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('blackhawk', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('blackhawk', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('blackhawk', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('blackhawk', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('blackhawk', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('blackhawk', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('blackhawk', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('blackhawk', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('blackhawk', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('blackhawk', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.YAK]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('yak', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('yak', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('yak', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('yak', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('yak', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('yak', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('yak', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('yak', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('yak', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('yak', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('yak', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('yak', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.TERRORIST]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('terrorist', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('terrorist', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('terrorist', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('terrorist', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('terrorist', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('terrorist', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('terrorist', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('terrorist', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('terrorist', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('terrorist', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('terrorist', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('terrorist', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.IVAN]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('ivan', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('ivan', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('ivan', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('ivan', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('ivan', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('ivan', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('ivan', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('ivan', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('ivan', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('ivan', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('ivan', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('ivan', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.FLAK]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('flak', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('flak', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('flak', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('flak', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('flak', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('flak', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('flak', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('flak', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('flak', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('flak', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('flak', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('flak', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.FLAKINFANTRY]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('flakinfantry', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('flakinfantry', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('flakinfantry', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('flakinfantry', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('flakinfantry', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('flakinfantry', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('flakinfantry', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('flakinfantry', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('flakinfantry', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('flakinfantry', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('flakinfantry', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('flakinfantry', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.GUARDIAN]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('guardian', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('guardian', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('guardian', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('guardian', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('guardian', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('guardian', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('guardian', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('guardian', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('guardian', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('guardian', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('guardian', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('guardian', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.DESPOT]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('despot', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('despot', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('despot', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('despot', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('despot', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('despot', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('despot', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('despot', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('despot', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('despot', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('despot', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('despot', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.CHRONO]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('chrono', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('chrono', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('chrono', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('chrono', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('chrono', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('chrono', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('chrono', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('chrono', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('chrono', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('chrono', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('chrono', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('chrono', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.APC]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('apc', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('apc', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('apc', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('apc', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('apc', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('apc', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('apc', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('apc', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('apc', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('apc', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('apc', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('apc', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.DESTROYER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('destroyer', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('destroyer', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('destroyer', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('destroyer', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('destroyer', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('destroyer', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('destroyer', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('destroyer', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('destroyer', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('destroyer', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('destroyer', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('destroyer', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.SUBMARINE]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('submarine', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('submarine', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('submarine', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('submarine', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('submarine', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('submarine', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('submarine', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('submarine', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('submarine', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('submarine', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('submarine', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('submarine', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.TRANSPORT_SHIP]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('transport_ship', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('transport_ship', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('transport_ship', UnitVoiceEvent.ATTACK),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('transport_ship', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('transport_ship', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('transport_ship', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('transport_ship', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('transport_ship', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('transport_ship', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('transport_ship', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('transport_ship', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('transport_ship', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.SPY]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('spy', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('spy', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('spy', UnitVoiceEvent.ATTACK),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('spy', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('spy', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('spy', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('spy', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('spy', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('spy', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('spy', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('spy', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('spy', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.WAR_MINER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('war_miner', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('war_miner', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('war_miner', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('war_miner', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('war_miner', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('war_miner', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('war_miner', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('war_miner', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('war_miner', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('war_miner', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('war_miner', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('war_miner', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.MIRAGE]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('mirage', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('mirage', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('mirage', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('mirage', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('mirage', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('mirage', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('mirage', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('mirage', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('mirage', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('mirage', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('mirage', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('mirage', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.GRIZZLY]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('grizzly', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('grizzly', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('grizzly', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('grizzly', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('grizzly', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('grizzly', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('grizzly', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('grizzly', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('grizzly', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('grizzly', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('grizzly', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('grizzly', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.LASH]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('lash', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('lash', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('lash', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('lash', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('lash', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('lash', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('lash', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('lash', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('lash', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('lash', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('lash', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('lash', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.DREADNOUGHT]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('dreadnought', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('dreadnought', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('dreadnought', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('dreadnought', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('dreadnought', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('dreadnought', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('dreadnought', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('dreadnought', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('dreadnought', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('dreadnought', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('dreadnought', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('dreadnought', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.AEGIS]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('aegis', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('aegis', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('aegis', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('aegis', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('aegis', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('aegis', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('aegis', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('aegis', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('aegis', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('aegis', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('aegis', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('aegis', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.GI]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('gi', UnitVoiceEvent.SELECT, 3),
+    [UnitVoiceEvent.MOVE]: voiceFiles('gi', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('gi', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('gi', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('gi', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('gi', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('gi', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('gi', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('gi', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('gi', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('gi', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('gi', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.GUARDIAN_GI]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('guardian_gi', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('guardian_gi', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('guardian_gi', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('guardian_gi', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('guardian_gi', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('guardian_gi', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('guardian_gi', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('guardian_gi', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('guardian_gi', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('guardian_gi', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('guardian_gi', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('guardian_gi', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.BRUTE]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('brute', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('brute', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('brute', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('brute', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('brute', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('brute', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('brute', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('brute', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('brute', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('brute', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('brute', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('brute', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.DISC]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('disc', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('disc', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('disc', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('disc', UnitVoiceEvent.UNDER_FIRE),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('disc', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('disc', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('disc', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('disc', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('disc', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('disc', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('disc', UnitVoiceEvent.SPECIAL, 2),
+    [UnitVoiceEvent.BUILT]: voiceFiles('disc', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.BOOMER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('boomer', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('boomer', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('boomer', UnitVoiceEvent.ATTACK, 2),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('boomer', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('boomer', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('boomer', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('boomer', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('boomer', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('boomer', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('boomer', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('boomer', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('boomer', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.GATTLING_TANK]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('gattling_tank', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('gattling_tank', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('gattling_tank', UnitVoiceEvent.ATTACK, 3),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('gattling_tank', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('gattling_tank', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('gattling_tank', UnitVoiceEvent.KILL, 2),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('gattling_tank', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('gattling_tank', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('gattling_tank', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('gattling_tank', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('gattling_tank', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('gattling_tank', UnitVoiceEvent.BUILT),
+  },
+  [UnitType.SLAVE_MINER]: {
+    [UnitVoiceEvent.SELECT]: voiceFiles('slave_miner', UnitVoiceEvent.SELECT, 2),
+    [UnitVoiceEvent.MOVE]: voiceFiles('slave_miner', UnitVoiceEvent.MOVE, 2),
+    [UnitVoiceEvent.ATTACK]: voiceFiles('slave_miner', UnitVoiceEvent.ATTACK),
+    [UnitVoiceEvent.UNDER_FIRE]: voiceFiles('slave_miner', UnitVoiceEvent.UNDER_FIRE, 2),
+    [UnitVoiceEvent.LOW_HEALTH]: voiceFiles('slave_miner', UnitVoiceEvent.LOW_HEALTH),
+    [UnitVoiceEvent.KILL]: voiceFiles('slave_miner', UnitVoiceEvent.KILL),
+    [UnitVoiceEvent.PROMOTED]: voiceFiles('slave_miner', UnitVoiceEvent.PROMOTED),
+    [UnitVoiceEvent.GARRISON]: voiceFiles('slave_miner', UnitVoiceEvent.GARRISON),
+    [UnitVoiceEvent.UNGARRISON]: voiceFiles('slave_miner', UnitVoiceEvent.UNGARRISON),
+    [UnitVoiceEvent.DEPLOY]: voiceFiles('slave_miner', UnitVoiceEvent.DEPLOY),
+    [UnitVoiceEvent.SPECIAL]: voiceFiles('slave_miner', UnitVoiceEvent.SPECIAL),
+    [UnitVoiceEvent.BUILT]: voiceFiles('slave_miner', UnitVoiceEvent.BUILT),
+  },
+};
+
+/**
  * Manages game sounds, music, and voice lines
  * @public
  */
@@ -134,6 +819,13 @@ export class GameSoundManager {
   private readonly SOUND_FALLOFF_RADIUS = 800; // 音效衰减半径（像素）
   private readonly SOUND_MIN_VOLUME = 0.1; // 最小音量
   private volumeChangedUnsub?: () => void;
+  private voiceEventUnsubs: (() => void)[] = [];
+
+  // Battle music auto-switch
+  private lastCombatTime: number = 0;
+  private isPlayingBattleMusic: boolean = false;
+  private combatUnsub?: () => void;
+  private static readonly BATTLE_MUSIC_COOLDOWN = 10000; // 10s after last combat → switch back to calm
 
   /**
    * Creates a new GameSoundManager instance
@@ -146,6 +838,19 @@ export class GameSoundManager {
 
     this.initializeCategoryVolumes();
     this.listenForSettingsChanges();
+    this.listenForCombatEvents();
+    this.initVoiceEvents();
+  }
+
+  /** Listen for combat events to trigger battle music */
+  private listenForCombatEvents(): void {
+    this.combatUnsub = gameEventBus.on('combat:hit', () => {
+      this.lastCombatTime = this.scene.time.now;
+      if (!this.isPlayingBattleMusic) {
+        this.isPlayingBattleMusic = true;
+        this.playMusic('music_battle', 3000);
+      }
+    });
   }
 
   /** Listen for volume change events from settings panel */
@@ -324,6 +1029,120 @@ export class GameSoundManager {
 
     const randomVoice = voicesInCategory[Math.floor(Math.random() * voicesInCategory.length)];
     this.playVoice(randomVoice.key);
+  }
+
+  /**
+   * Plays a unit-specific voice line for a given event
+   * @param unitType - The type of unit speaking
+   * @param event - The voice event triggering the line
+   * @param position - Optional world position for spatial audio
+   */
+  playUnitVoice(unitType: UnitType, event: UnitVoiceEvent, position?: Vector2): void {
+    if (!this.config.enableSounds || this.config.muted) return;
+
+    const voiceMap = UNIT_VOICE_MAP[unitType];
+    if (!voiceMap) return;
+
+    const variants = voiceMap[event];
+    if (!variants || variants.length === 0) return;
+
+    // Respect voice cooldown per unit type
+    const cooldownKey = `unit_voice_${unitType}_${event}`;
+    const lastPlayed = this.lastVoiceTime.get(cooldownKey) || 0;
+    const now = Date.now();
+    if (now - lastPlayed < this.voiceCooldown) return;
+
+    // Pick a random variant
+    const filePath = variants[Math.floor(Math.random() * variants.length)];
+    const soundKey = filePath.replace(/[/.]/g, '_');
+
+    // Check if audio is in Phaser cache
+    if (!this.scene.sound.get(soundKey)) {
+      console.warn(`Unit voice "${soundKey}" not yet loaded, skipping play`);
+      return;
+    }
+
+    // Calculate distance-based volume attenuation
+    let distanceVolume = 1;
+    if (position) {
+      const dx = position.x - this.cameraPosition.x;
+      const dy = position.y - this.cameraPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > this.SOUND_FALLOFF_RADIUS) return;
+
+      const distanceFactor = 1 - (distance / this.SOUND_FALLOFF_RADIUS);
+      distanceVolume = Math.max(this.SOUND_MIN_VOLUME, distanceFactor);
+    }
+
+    // Destroy old sound object if reusing key
+    const existing = this.sounds.get(soundKey);
+    if (existing) {
+      if (existing.isPlaying) return;
+      existing.destroy();
+    }
+
+    const sound = this.scene.sound.add(soundKey, {
+      volume: this.categoryVolumes.get('voice')! * this.config.volume * distanceVolume
+    });
+    this.sounds.set(soundKey, sound);
+    sound.play();
+
+    this.lastVoiceTime.set(cooldownKey, now);
+  }
+
+  /**
+   * Registers event bus listeners for unit voice events
+   */
+  initVoiceEvents(): void {
+    // unit:move → play MOVE voice
+    this.voiceEventUnsubs.push(
+      gameEventBus.on('unit:move', (event) => {
+        const data = event.data as { unitType: UnitType; position?: Vector2 } | undefined;
+        if (!data) return;
+        this.playUnitVoice(data.unitType, UnitVoiceEvent.MOVE, data.position);
+      })
+    );
+
+    // unit:attack → play ATTACK voice
+    this.voiceEventUnsubs.push(
+      gameEventBus.on('unit:attack', (event) => {
+        const data = event.data as { unitType: UnitType; position?: Vector2 } | undefined;
+        if (!data) return;
+        this.playUnitVoice(data.unitType, UnitVoiceEvent.ATTACK, data.position);
+      })
+    );
+
+    // unit:produced → play BUILT voice
+    this.voiceEventUnsubs.push(
+      gameEventBus.on('unit:produced', (event) => {
+        const data = event.data as { unitType: UnitType; position?: Vector2 } | undefined;
+        if (!data) return;
+        this.playUnitVoice(data.unitType, UnitVoiceEvent.BUILT, data.position);
+      })
+    );
+
+    // unit:promoted → play PROMOTED voice
+    this.voiceEventUnsubs.push(
+      gameEventBus.on('unit:promoted', (event) => {
+        const data = event.data as { unitType: UnitType; position?: Vector2 } | undefined;
+        if (!data) return;
+        this.playUnitVoice(data.unitType, UnitVoiceEvent.PROMOTED, data.position);
+      })
+    );
+
+    // unit:destroyed → play UNDER_FIRE for nearby allied units
+    this.voiceEventUnsubs.push(
+      gameEventBus.on('unit:destroyed', (event) => {
+        const data = event.data as { unitType: UnitType; position?: Vector2; nearbyAlliedUnits?: Array<{ unitType: UnitType; position: Vector2 }> } | undefined;
+        if (!data) return;
+        if (data.nearbyAlliedUnits) {
+          for (const ally of data.nearbyAlliedUnits) {
+            this.playUnitVoice(ally.unitType, UnitVoiceEvent.UNDER_FIRE, ally.position);
+          }
+        }
+      })
+    );
   }
 
   /**
@@ -566,9 +1385,27 @@ export class GameSoundManager {
   /**
    * Cleans up resources used by this manager
    */
+  /**
+   * Update method — checks for battle music cooldown
+   */
+  update(time: number): void {
+    if (this.isPlayingBattleMusic && this.lastCombatTime > 0) {
+      const elapsed = time - this.lastCombatTime;
+      if (elapsed >= GameSoundManager.BATTLE_MUSIC_COOLDOWN) {
+        this.isPlayingBattleMusic = false;
+        this.lastCombatTime = 0;
+        this.playMusic('music_calm', 3000);
+      }
+    }
+  }
+
   dispose(): void {
     this.volumeChangedUnsub?.();
     this.volumeChangedUnsub = undefined;
+    this.combatUnsub?.();
+    this.combatUnsub = undefined;
+    this.voiceEventUnsubs.forEach(unsub => unsub());
+    this.voiceEventUnsubs = [];
 
     this.stopAll();
 

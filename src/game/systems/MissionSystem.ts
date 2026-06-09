@@ -1,3 +1,5 @@
+import { useGameStore } from '../../store/gameStore';
+
 export type ObjectiveType = 'primary' | 'secondary' | 'bonus';
 export type ObjectiveStatus = 'active' | 'completed' | 'failed' | 'skipped';
 
@@ -239,8 +241,19 @@ export class MissionSystem {
     this.notifyMissionComplete(success);
   }
 
-  private grantRewards(_rewards: NonNullable<MissionConfig['rewards']>): void {
-    // Rewards are applied externally via onMissionComplete callbacks
+  private grantRewards(rewards: NonNullable<MissionConfig['rewards']>): void {
+    const state = useGameStore.getState();
+    if (rewards.credits && state.currentPlayer) {
+      state.currentPlayer.money += rewards.credits;
+    }
+    // Grant objective-level rewards
+    if (this.currentMission) {
+      for (const objective of this.currentMission.objectives.values()) {
+        if (objective.status === 'completed' && objective.rewards?.credits && state.currentPlayer) {
+          state.currentPlayer.money += objective.rewards.credits;
+        }
+      }
+    }
   }
 
   pause(): void {

@@ -39,6 +39,8 @@ function mapUnitStateToAI(state: UnitState): UnitAIState {
     case UnitState.GUARDING: return 'defending';
     case UnitState.REPAIRING: return 'defending';
     case UnitState.BUILDING: return 'idle';
+    case UnitState.CAPTURING: return 'attacking';
+    case UnitState.RETREATING: return 'retreating';
     default: return 'idle';
   }
 }
@@ -72,7 +74,6 @@ export function convertUnitToAIUnit(unit: Unit): AIUnit {
     data: {
       canAttack: unit.data.canAttack,
       canHarvest: unit.data.canHarvest,
-      canBuild: unit.data.canBuild,
       canCapture: unit.data.canCapture,
     },
   };

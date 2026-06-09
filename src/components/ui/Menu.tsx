@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGameStore, GameSettings } from '../../store/gameStore';
-import { Faction, Difficulty, GameState, GameMapData, PlayerSlot, PLAYER_COLORS } from '../../types';
+import { Faction, Difficulty, GameState, GameMapData, PlayerSlot, PLAYER_COLORS, isSoviet } from '../../types';
 import { mapPresets, MapPreset } from '../../game/map/MapPresets';
 import { MapEditor } from './MapEditor';
 import { PlayerSetup } from './PlayerSetup';
@@ -34,7 +34,9 @@ export const Menu: React.FC = () => {
   React.useEffect(() => {
     const saved = localStorage.getItem('customMaps');
     if (saved) {
-      setCustomMaps(JSON.parse(saved));
+      try {
+        setCustomMaps(JSON.parse(saved));
+      } catch { /* Ignore corrupted data */ }
     }
   }, []);
 
@@ -60,7 +62,7 @@ export const Menu: React.FC = () => {
       map = mapPresets[0].createMap(mapPresets[0].width, mapPresets[0].height);
     }
 
-    const aiFaction = selectedFaction === Faction.USA ? Faction.SOVIET : Faction.USA;
+    const aiFaction = isSoviet(selectedFaction) ? Faction.USA : Faction.SOVIET;
 
     const playerSlot: PlayerSlot = {
       id: 'player',
@@ -173,7 +175,7 @@ export const Menu: React.FC = () => {
   };
 
   const handleEditorPlay = (map: GameMapData) => {
-    const aiFaction = selectedFaction === Faction.USA ? Faction.SOVIET : Faction.USA;
+    const aiFaction = isSoviet(selectedFaction) ? Faction.USA : Faction.SOVIET;
     const playerSlot: PlayerSlot = {
       id: 'player',
       faction: selectedFaction,
@@ -203,7 +205,7 @@ export const Menu: React.FC = () => {
       ? selectedMap.createMap(selectedMap.width, selectedMap.height)
       : mapPresets[0].createMap(mapPresets[0].width, mapPresets[0].height);
 
-    const aiFaction = selectedFaction === Faction.USA ? Faction.SOVIET : Faction.USA;
+    const aiFaction = isSoviet(selectedFaction) ? Faction.USA : Faction.SOVIET;
 
     const playerSlot: PlayerSlot = {
       id: 'player',

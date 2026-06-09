@@ -115,6 +115,13 @@ export class GameUIController {
         case 'build':
           this.setActivePanel('build');
           break;
+        case 'sell':
+        case 'repair':
+          this.setActivePanel('building');
+          break;
+        case 'upgrade':
+          this.setActivePanel('building');
+          break;
         default:
           break;
       }

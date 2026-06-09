@@ -7,6 +7,7 @@ import {
   UnitType,
   BuildingType,
   UpgradeType,
+  UnitStance,
 } from '../../types';
 import type {
   Player,
@@ -19,7 +20,9 @@ import type {
   BuildQueueItem,
 } from '../../types';
 import { AIController } from './AIController';
-import { useGameStore } from '../../store/gameStore';
+import { useGameStore, type GameSettings } from '../../store/gameStore';
+import { getUnitsByFaction } from '../data/units';
+import { getBuildingsByFaction } from '../data/buildings';
 
 export interface SaveSlot {
   id: number;
@@ -42,6 +45,7 @@ export interface SaveData {
   map: GameMapData;
   gameState: GameState;
   neutralBuildings: Building[];
+  gameSettings?: GameSettings;
 }
 
 interface SaveStorage {
@@ -377,7 +381,7 @@ export class SaveManager {
     }
   }
 
-  private extractMetadata(slotId: number, name: string, data: SaveData): SaveSlot {
+  private extractMetadata(slotId: number, name: string, data: SaveData, thumbnail?: string | null): SaveSlot {
     return {
       id: slotId,
       name,
@@ -385,7 +389,7 @@ export class SaveManager {
       gameTime: data.gameTime,
       faction: data.faction,
       difficulty: data.difficulty,
-      thumbnail: null,
+      thumbnail: thumbnail ?? null,
     };
   }
 
@@ -416,13 +420,13 @@ export class SaveManager {
     return slots;
   }
 
-  saveGame(slotId: number, name: string, state: SaveData): boolean {
+  saveGame(slotId: number, name: string, state: SaveData, thumbnail?: string | null): boolean {
     if (slotId < 0 || slotId > this.MAX_SLOTS) return false;
     if (!validateSaveData(state)) return false;
 
     const storage = this.readStorage();
     storage.slots[slotId] = state;
-    storage.metadata[slotId] = this.extractMetadata(slotId, name, state);
+    storage.metadata[slotId] = this.extractMetadata(slotId, name, state, thumbnail);
     return this.writeStorage(storage);
   }
 
@@ -449,22 +453,47 @@ export class SaveManager {
       aiControllers.set(aiPlayer.id, controller);
     }
 
-    // Apply defaults for missing optional fields on units
+    // Apply defaults for missing optional fields on units and rehydrate data references
     const allPlayers = [data.currentPlayer, ...data.aiPlayers];
     for (const player of allPlayers) {
+      const factionUnits = getUnitsByFaction(player.faction);
+      const factionBuildings = getBuildingsByFaction(player.faction);
       for (const unit of player.units) {
+        // Rehydrate unit.data from current static data (serialized snapshot may be stale)
+        const freshUnitData = factionUnits[unit.type];
+        if (freshUnitData) {
+          unit.data = freshUnitData;
+        }
         unit.isDisguised = unit.isDisguised ?? false;
         unit.idleTimer = unit.idleTimer ?? 0;
         unit.transportId = unit.transportId ?? undefined;
         unit.passengers = unit.passengers ?? [];
         unit.maxPassengers = unit.maxPassengers ?? undefined;
         unit.isAttackMoving = unit.isAttackMoving ?? false;
+        unit.attackTarget = unit.attackTarget ?? null;
+        unit.stance = unit.stance ?? UnitStance.GUARD;
+        unit.waypoints = unit.waypoints ?? [];
+        unit.harvestTarget = unit.harvestTarget ?? null;
+        unit.isNaval = unit.isNaval ?? freshUnitData?.isNaval ?? false;
         unit.chronoShiftTarget = unit.chronoShiftTarget ?? undefined;
         unit.chronoShiftTimer = unit.chronoShiftTimer ?? undefined;
         unit.isChronoShifting = unit.isChronoShifting ?? false;
         unit.isChronoCooldown = unit.isChronoCooldown ?? false;
+        unit.isSubmerged = unit.isSubmerged ?? false;
+        unit.ammo = unit.ammo ?? unit.data?.maxAmmo;
+        unit.isReturningToBase = unit.isReturningToBase ?? false;
+        unit._buffUntil = unit._buffUntil ?? undefined;
+        unit._debuffUntil = unit._debuffUntil ?? undefined;
+        unit.isInvulnerable = unit.isInvulnerable ?? false;
+        unit.invulnerableUntil = unit.invulnerableUntil ?? undefined;
+        unit.isRepairingAtFactory = unit.isRepairingAtFactory ?? false;
       }
       for (const building of player.buildings) {
+        // Rehydrate building.data from current static data
+        const freshBuildingData = factionBuildings[building.type];
+        if (freshBuildingData) {
+          building.data = freshBuildingData;
+        }
         building.empDisabledUntil = building.empDisabledUntil ?? undefined;
         building.isRepairing = building.isRepairing ?? false;
         building.productionQueue = building.productionQueue || [];
@@ -484,6 +513,17 @@ export class SaveManager {
       player.researchedUpgrades = player.researchedUpgrades ?? [];
       player.researchQueue = player.researchQueue ?? [];
       player.statistics = player.statistics ?? { unitsProduced: 0, unitsLost: 0, enemiesDestroyed: 0, buildingsBuilt: 0, buildingsLost: 0, resourcesGathered: 0 };
+      player._tempSpySatelliteUntil = player._tempSpySatelliteUntil ?? undefined;
+    }
+    // Rehydrate neutral building data
+    if (data.neutralBuildings) {
+      const neutralBuildings = getBuildingsByFaction(Faction.NEUTRAL);
+      for (const building of data.neutralBuildings) {
+        const freshBuildingData = neutralBuildings[building.type];
+        if (freshBuildingData) {
+          building.data = freshBuildingData;
+        }
+      }
     }
 
     useGameStore.setState({
@@ -494,7 +534,7 @@ export class SaveManager {
       gameState: data.gameState,
       isPaused: false,
       gameTime: data.gameTime,
-      gameSpeed: 1,
+      gameSpeed: (data.gameSettings?.gameSpeed ?? 1) as import('../engine/GameEngine').GameSpeed,
       neutralBuildings: data.neutralBuildings || [],
     });
 

@@ -46,8 +46,12 @@ export class PowerSystem {
       if (b.empDisabledUntil && b.empDisabledUntil > now) return sum;
       return sum + b.powerOutput;
     }, 0);
-    const totalConsumption = player.buildings.reduce((sum, b) =>
-      sum + (b.isConstructed ? b.powerConsumption : 0), 0);
+    const totalConsumption = player.buildings.reduce((sum, b) => {
+      if (!b.isConstructed) return sum;
+      // EMP-disabled buildings don't consume power
+      if (b.empDisabledUntil && b.empDisabledUntil > now) return sum;
+      return sum + b.powerConsumption;
+    }, 0);
     const wasLowPower = player.power < GAME_CONFIG.LOW_POWER_THRESHOLD;
     player.power = totalPower - totalConsumption;
     player.maxPower = totalPower;
@@ -76,7 +80,10 @@ export class PowerSystem {
 
       // Allocate power by priority
       for (const building of sortedBuildings) {
-        if (remainingPower >= building.powerConsumption) {
+        // EMP-disabled buildings are not powered regardless of power allocation
+        if (building.empDisabledUntil && building.empDisabledUntil > now) {
+          building.isPowered = false;
+        } else if (remainingPower >= building.powerConsumption) {
           building.isPowered = true;
           remainingPower -= building.powerConsumption;
         } else {
@@ -84,9 +91,13 @@ export class PowerSystem {
         }
       }
     } else {
-      // Sufficient power: all buildings powered
+      // Sufficient power: all buildings powered (unless EMP-disabled)
       for (const building of player.buildings) {
-        building.isPowered = !isLowPower || building.powerOutput > 0;
+        if (building.empDisabledUntil && building.empDisabledUntil > now) {
+          building.isPowered = false;
+        } else {
+          building.isPowered = true;
+        }
       }
     }
   }
