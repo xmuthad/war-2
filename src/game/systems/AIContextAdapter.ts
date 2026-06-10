@@ -75,7 +75,11 @@ export function convertUnitToAIUnit(unit: Unit): AIUnit {
       canAttack: unit.data.canAttack,
       canHarvest: unit.data.canHarvest,
       canCapture: unit.data.canCapture,
+      canGarrison: unit.data.canGarrison,
+      canDeploy: unit.data.canDeploy,
+      deployBuildingType: unit.data.deployBuildingType,
     },
+    garrisonedBuildingId: unit.garrisonedBuildingId,
   };
 }
 
@@ -92,6 +96,11 @@ export function convertBuildingToAIBuilding(building: Building): AIBuilding {
     productionQueue: building.productionQueue.map(item => String(item.type)),
     isActive: building.isActive && building.isPowered,
     rallyPoint: building.rallyPoint ? { ...building.rallyPoint } : undefined,
+    isGarrisonable: building.isGarrisonable,
+    garrisonedUnits: building.garrisonedUnits ? [...building.garrisonedUnits] : undefined,
+    maxGarrison: building.maxGarrison,
+    isBridge: building.isBridge,
+    isBridgeDestroyed: building.isBridgeDestroyed,
   };
 }
 
@@ -216,7 +225,8 @@ export function buildAIContext(
   enemyPlayer: Player,
   map: GameMapData,
   gameTime: number,
-  difficulty: Difficulty
+  difficulty: Difficulty,
+  neutralBuildings?: Building[]
 ): AIContext {
   const aiPlayerState = convertPlayerToAIPlayerState(aiPlayer);
   const enemyPlayerState = convertPlayerToAIPlayerState(enemyPlayer);
@@ -236,6 +246,11 @@ export function buildAIContext(
   };
 
   tempContext.threatLevel = calculateThreatLevel(tempContext);
+
+  // Add neutral buildings (garrisonable, bridges, etc.)
+  if (neutralBuildings && neutralBuildings.length > 0) {
+    tempContext.neutralBuildings = neutralBuildings.map(convertBuildingToAIBuilding);
+  }
 
   return tempContext;
 }

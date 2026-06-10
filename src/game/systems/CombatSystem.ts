@@ -3,7 +3,7 @@ import { mapManager } from '../map/MapManager';
 import { gameEventBus } from './GameEventBus';
 import { useGameStore } from '../../store/gameStore';
 
-const INFANTRY_UNIT_TYPES = new Set<UnitType>([
+export const INFANTRY_UNIT_TYPES = new Set<UnitType>([
   UnitType.SOLDIER, UnitType.ROCKET, UnitType.SNIPER, UnitType.SEAL,
   UnitType.TANYA, UnitType.CONSCRIPT, UnitType.FLAKINFANTRY,
   UnitType.TERRORIST, UnitType.IVAN, UnitType.CHRONO, UnitType.SPY,

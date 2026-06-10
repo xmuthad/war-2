@@ -68,7 +68,11 @@ export type AIActionType =
   | 'activateSuperweapon'
   | 'activateChronosphere'
   | 'chronoShift'
-  | 'sellBuilding';
+  | 'sellBuilding'
+  | 'garrison'
+  | 'ungarrison'
+  | 'deploy'
+  | 'repairBridge';
 
 export const createConditionCheck = (
   id: string,

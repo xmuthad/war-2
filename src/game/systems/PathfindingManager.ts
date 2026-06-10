@@ -157,7 +157,7 @@ export class PathfindingGrid {
     this.movementCost.clear();
     this.tileTypes.clear();
 
-    const impassableTypes = new Set(options?.impassableTypes || [TileType.WATER]);
+    const impassableTypes = new Set(options?.impassableTypes || [TileType.WATER, TileType.BRIDGE_DESTROYED]);
 
     for (let y = 0; y < mapData.height; y++) {
       for (let x = 0; x < mapData.width; x++) {
@@ -197,6 +197,9 @@ export class PathfindingGrid {
                 break;
               case TileType.CRATER:
                 cost = 1.5;
+                break;
+              case TileType.BRIDGE:
+                cost = 0.8;
                 break;
               default:
                 cost = 1.0;

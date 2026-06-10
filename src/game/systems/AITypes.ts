@@ -15,6 +15,7 @@ export interface AIContext {
   currentTime: number;
   difficulty: AIDifficulty;
   threatLevel: ThreatLevel;
+  neutralBuildings?: AIBuilding[];
 }
 
 export interface AIPlayerState {
@@ -51,7 +52,11 @@ export interface AIUnit {
     canAttack?: boolean;
     canHarvest?: boolean;
     canCapture?: boolean;
+    canGarrison?: boolean;
+    canDeploy?: boolean;
+    deployBuildingType?: string;
   };
+  garrisonedBuildingId?: string;
 }
 
 export interface AIBuilding {
@@ -66,6 +71,11 @@ export interface AIBuilding {
   productionQueue: string[];
   isActive: boolean;
   rallyPoint?: { x: number; y: number };
+  isGarrisonable?: boolean;
+  garrisonedUnits?: string[];
+  maxGarrison?: number;
+  isBridge?: boolean;
+  isBridgeDestroyed?: boolean;
 }
 
 export interface AIGameMap {

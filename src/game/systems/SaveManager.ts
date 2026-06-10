@@ -206,7 +206,11 @@ function validateUnit(unit: unknown): unit is Unit {
     (u.chronoShiftTarget === undefined || isValidVector2(u.chronoShiftTarget)) &&
     (u.chronoShiftTimer === undefined || typeof u.chronoShiftTimer === 'number') &&
     (u.isChronoShifting === undefined || typeof u.isChronoShifting === 'boolean') &&
-    (u.isChronoCooldown === undefined || typeof u.isChronoCooldown === 'boolean')
+    (u.isChronoCooldown === undefined || typeof u.isChronoCooldown === 'boolean') &&
+    // Garrison/deploy fields
+    (u.garrisonedBuildingId === undefined || u.garrisonedBuildingId === null || typeof u.garrisonedBuildingId === 'string') &&
+    (u.isDeploying === undefined || typeof u.isDeploying === 'boolean') &&
+    (u.deployTimer === undefined || typeof u.deployTimer === 'number')
   );
 }
 
@@ -250,7 +254,17 @@ function validateBuilding(building: unknown): building is Building {
     (b.attackRange === undefined || typeof b.attackRange === 'number') &&
     (b.attackSpeed === undefined || typeof b.attackSpeed === 'number') &&
     (b.attackTarget === undefined || b.attackTarget === null || typeof b.attackTarget === 'string') &&
-    (b.attackCooldown === undefined || typeof b.attackCooldown === 'number')
+    (b.attackCooldown === undefined || typeof b.attackCooldown === 'number') &&
+    // Garrison fields
+    (b.garrisonedUnits === undefined || (Array.isArray(b.garrisonedUnits) && (b.garrisonedUnits as unknown[]).every(g => typeof g === 'string'))) &&
+    (b.maxGarrison === undefined || typeof b.maxGarrison === 'number') &&
+    (b.isGarrisonable === undefined || typeof b.isGarrisonable === 'boolean') &&
+    // Bridge fields
+    (b.isBridge === undefined || typeof b.isBridge === 'boolean') &&
+    (b.isBridgeDestroyed === undefined || typeof b.isBridgeDestroyed === 'boolean') &&
+    (b.bridgeTilePositions === undefined || (Array.isArray(b.bridgeTilePositions) && (b.bridgeTilePositions as unknown[]).every(isValidVector2))) &&
+    // Elevation field
+    (b.elevationLevel === undefined || typeof b.elevationLevel === 'number')
   );
 }
 
@@ -487,6 +501,10 @@ export class SaveManager {
         unit.isInvulnerable = unit.isInvulnerable ?? false;
         unit.invulnerableUntil = unit.invulnerableUntil ?? undefined;
         unit.isRepairingAtFactory = unit.isRepairingAtFactory ?? false;
+        // Garrison/deploy fields
+        unit.garrisonedBuildingId = unit.garrisonedBuildingId ?? undefined;
+        unit.isDeploying = unit.isDeploying ?? false;
+        unit.deployTimer = unit.deployTimer ?? 0;
       }
       for (const building of player.buildings) {
         // Rehydrate building.data from current static data
@@ -509,6 +527,16 @@ export class SaveManager {
         building.attackSpeed = building.attackSpeed ?? 0;
         building.attackTarget = building.attackTarget ?? null;
         building.attackCooldown = building.attackCooldown ?? 0;
+        // Garrison fields
+        building.garrisonedUnits = building.garrisonedUnits ?? [];
+        building.maxGarrison = building.maxGarrison ?? building.data?.maxGarrison ?? 0;
+        building.isGarrisonable = building.isGarrisonable ?? building.data?.isGarrisonable ?? false;
+        // Bridge fields
+        building.isBridge = building.isBridge ?? false;
+        building.isBridgeDestroyed = building.isBridgeDestroyed ?? false;
+        building.bridgeTilePositions = building.bridgeTilePositions ?? [];
+        // Elevation field
+        building.elevationLevel = building.elevationLevel ?? 0;
       }
       player.researchedUpgrades = player.researchedUpgrades ?? [];
       player.researchQueue = player.researchQueue ?? [];

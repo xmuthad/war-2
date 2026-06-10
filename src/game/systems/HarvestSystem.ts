@@ -158,6 +158,13 @@ export class HarvestSystem {
       if (player.researchedUpgrades.includes(UpgradeType.GOLD_REFINING)) {
         depositValue = Math.floor(depositValue * 1.5);
       }
+      // Ore Purifier: 25% bonus if player has a constructed and powered ore purifier
+      const hasOrePurifier = player.buildings.some(
+        b => b.type === BuildingType.ORE_PURIFIER && b.isConstructed && b.isPowered
+      );
+      if (hasOrePurifier) {
+        depositValue = Math.floor(depositValue * 1.25);
+      }
       player.money += depositValue;
       player.statistics.resourcesGathered += depositValue;
       gameEventBus.emit('resource:collected', { amount: depositValue, faction: player.faction });

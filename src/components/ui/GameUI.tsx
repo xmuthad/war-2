@@ -571,6 +571,51 @@ export const GameUI: React.FC = () => {
         );
       }
 
+      // Garrison button for infantry that can garrison buildings
+      if (unit.data.canGarrison && !unit.garrisonedBuildingId) {
+        buttons.push(
+          { id: 'garrison', icon: '🏠', label: '驻扎', hotkey: 'G', tooltip: '进入建筑驻扎 (G)',
+            onClick: () => {
+              setPendingCommand('garrison');
+              inputHandler.setPendingCommandExternal('garrison');
+            }
+          }
+        );
+      }
+
+      // Ungarrison button for garrisoned buildings
+      if (unit.garrisonedBuildingId) {
+        buttons.push(
+          { id: 'ungarrison', icon: '🚶', label: '撤离', hotkey: 'G', tooltip: '撤离驻扎建筑 (G)',
+            onClick: () => {
+              store.ungarrisonBuilding(unit.garrisonedBuildingId!);
+            }
+          }
+        );
+      }
+
+      // Deploy button for MCV and other deployable units
+      if (unit.data.canDeploy && !unit.isDeploying) {
+        buttons.push(
+          { id: 'deploy', icon: '🏗️', label: '展开', hotkey: 'D', tooltip: '展开为建筑 (D)',
+            onClick: () => {
+              store.startDeploy(unit.id);
+            }
+          }
+        );
+      }
+
+      // Cancel deploy button
+      if (unit.isDeploying) {
+        buttons.push(
+          { id: 'cancelDeploy', icon: '❌', label: '取消展开', hotkey: 'D', tooltip: '取消展开 (D)',
+            onClick: () => {
+              store.cancelDeploy(unit.id);
+            }
+          }
+        );
+      }
+
       // Capture button for engineers
       if (unit.data.canCapture) {
         buttons.push(
@@ -630,19 +675,45 @@ export const GameUI: React.FC = () => {
             onClick: () => { setPendingCommand('rally'); inputHandler.setPendingCommandExternal('rally'); } }
         );
 
+        // Ungarrison button for garrisoned buildings
+        if (selectedBuilding.isGarrisonable && (selectedBuilding.garrisonedUnits?.length ?? 0) > 0) {
+          buttons.push(
+            { id: 'ungarrison', icon: '🚶', label: `撤离(${selectedBuilding.garrisonedUnits?.length}/${selectedBuilding.maxGarrison})`, hotkey: 'G',
+              tooltip: '撤离所有驻扎步兵',
+              onClick: () => { store.ungarrisonBuilding(selectedBuilding.id); } }
+          );
+        }
+
+        // Repair bridge button
+        if (selectedBuilding.isBridge && selectedBuilding.isBridgeDestroyed) {
+          buttons.push(
+            { id: 'repairBridge', icon: '🔨', label: '修复桥梁', hotkey: 'B',
+              tooltip: '工程师修复桥梁(500$)',
+              disabled: (currentPlayer?.money ?? 0) < 500,
+              onClick: () => { store.repairBridge(selectedBuilding.id); } }
+          );
+        }
+
         if (selectedBuilding.data.canProduce) {
           const factionUnits = UNITS_BY_FACTION[currentPlayer?.faction || selectedBuilding.faction] || {};
+          const hasIndustrialPlant = currentPlayer?.buildings.some(
+            b => b.type === BuildingType.INDUSTRIAL_PLANT && b.isConstructed && b.isPowered
+          ) || false;
           selectedBuilding.data.canProduce.forEach((itemType) => {
             if (typeof itemType !== 'string') return;
             const unitData = factionUnits[itemType] as UnitData | undefined;
             const name = unitData?.name || itemType;
-            const cost = unitData?.cost || 0;
+            const baseCost = unitData?.cost || 0;
+            // Industrial Plant: 25% discount for vehicles
+            const isVehicle = unitData && !INFANTRY_TYPES.has(itemType as UnitType) && itemType !== UnitType.MINER && !unitData.isNaval;
+            const finalCost = (isVehicle && hasIndustrialPlant) ? Math.floor(baseCost * 0.75) : baseCost;
+            const discountLabel = (isVehicle && hasIndustrialPlant && baseCost !== finalCost) ? ` ~~$${baseCost}~~` : '';
             buttons.push({
               id: `produce-${itemType}`,
               icon: '🏗️',
               label: name,
               hotkey: '',
-              tooltip: `${name} - $${cost}`,
+              tooltip: `${name} - $${finalCost}${discountLabel}`,
               onClick: () => produceUnit(selectedBuilding.id, itemType as UnitType)
             });
           });
@@ -882,6 +953,28 @@ export const GameUI: React.FC = () => {
             </div>
           )}
 
+          {unit.isDeploying && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">展开</span>
+              <div className="build-progress-bar">
+                <div
+                  className="build-progress-fill"
+                  style={{ width: `${Math.max(0, (1 - (unit.deployTimer || 0) / 5)) * 100}%`, backgroundColor: '#2196F3' }}
+                />
+                <span className="build-progress-text">
+                  🏗️ 展开中 {Math.round(Math.max(0, (1 - (unit.deployTimer || 0) / 5)) * 100)}%
+                </span>
+              </div>
+            </div>
+          )}
+
+          {unit.garrisonedBuildingId && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">状态</span>
+              <span className="stat-value">🏠 驻扎中</span>
+            </div>
+          )}
+
           {unit.data.description && (
             <div className="unit-description">
               <span className="description-text">{unit.data.description}</span>
@@ -1023,6 +1116,24 @@ export const GameUI: React.FC = () => {
                   🔧 修理中 {Math.round((selectedBuilding.health / selectedBuilding.maxHealth) * 100)}%
                 </span>
               </div>
+            </div>
+          )}
+
+          {selectedBuilding.isGarrisonable && selectedBuilding.isConstructed && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">驻军</span>
+              <span className="stat-value">
+                🏠 {selectedBuilding.garrisonedUnits?.length || 0}/{selectedBuilding.maxGarrison || selectedBuilding.data?.maxGarrison || 0}
+              </span>
+            </div>
+          )}
+
+          {selectedBuilding.isBridge && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">桥梁</span>
+              <span className={`stat-value ${selectedBuilding.isBridgeDestroyed ? 'stat-negative' : 'stat-positive'}`}>
+                {selectedBuilding.isBridgeDestroyed ? '❌ 已摧毁' : '✅ 完好'}
+              </span>
             </div>
           )}
 

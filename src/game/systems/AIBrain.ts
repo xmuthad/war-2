@@ -133,6 +133,14 @@ export class AIBrain {
       ])
     );
 
+    root.addChild(
+      new SequenceNode('repair_bridge', 'Repair Destroyed Bridge', [
+        createConditionCheck('can_repair_bridge', 'Has Engineers and Destroyed Bridges',
+          (ctx) => this.canRepairBridge(ctx)),
+        this.createRepairBridgeSequence()
+      ])
+    );
+
     return root;
   }
 
@@ -2068,5 +2076,130 @@ export class AIBrain {
     }
 
     return actions;
+  }
+
+  // === Garrison System ===
+
+  private canGarrison(ctx: AIContext): boolean {
+    const infantryUnits = ctx.aiPlayer.units.filter(u =>
+      u.data.canGarrison && u.state === UnitState.IDLE
+    );
+    if (infantryUnits.length === 0) return false;
+
+    const allBuildings = [
+      ...ctx.aiPlayer.buildings,
+      ...ctx.neutralBuildings,
+    ].filter(b => b.isGarrisonable && (b.garrisonedUnits?.length ?? 0) < (b.maxGarrison ?? 0));
+
+    return allBuildings.length > 0;
+  }
+
+  private createGarrisonSequence(): BehaviorNode {
+    return new ActionNode('garrison_infantry', 'Garrison Infantry in Buildings', (ctx) => {
+      const actions: AIAction[] = [];
+      const infantryUnits = ctx.aiPlayer.units.filter(u =>
+        u.data.canGarrison && u.state === UnitState.IDLE
+      );
+
+      const garrisonableBuildings = [
+        ...ctx.aiPlayer.buildings,
+        ...ctx.neutralBuildings,
+      ].filter(b => b.isGarrisonable && (b.garrisonedUnits?.length ?? 0) < (b.maxGarrison ?? 0));
+
+      for (const building of garrisonableBuildings) {
+        const remaining = (building.maxGarrison ?? 0) - (building.garrisonedUnits?.length ?? 0);
+        const nearbyInfantry = infantryUnits
+          .filter(u => !u.garrisonedBuildingId)
+          .sort((a, b) => getDistance(a.position, building.position) - getDistance(b.position, building.position))
+          .slice(0, remaining);
+
+        for (const unit of nearbyInfantry) {
+          actions.push({
+            type: 'garrison' as AIActionType,
+            unitId: unit.id,
+            buildingId: building.id,
+            priority: 4
+          });
+        }
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  // === Deploy System ===
+
+  private canDeployMCV(ctx: AIContext): boolean {
+    return ctx.aiPlayer.units.some(u => u.data.canDeploy && u.state === UnitState.IDLE);
+  }
+
+  private createDeploySequence(): BehaviorNode {
+    return new ActionNode('deploy_mcv', 'Deploy MCV to Establish Forward Base', (ctx) => {
+      const actions: AIAction[] = [];
+      const deployableUnits = ctx.aiPlayer.units.filter(u =>
+        u.data.canDeploy && u.state === UnitState.IDLE
+      );
+
+      for (const unit of deployableUnits) {
+        // Only deploy if we don't already have the building type
+        const buildingType = unit.data.deployBuildingType;
+        if (buildingType) {
+          const hasBuilding = ctx.aiPlayer.buildings.some(b => b.type === buildingType && b.isConstructed);
+          // Deploy MCV only if we lost our command center or want a forward base
+          if (!hasBuilding || ctx.aiPlayer.buildings.filter(b => b.type === buildingType).length < 2) {
+            actions.push({
+              type: 'deploy' as AIActionType,
+              unitId: unit.id,
+              priority: 8
+            });
+          }
+        }
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  private canRepairBridge(ctx: AIContext): boolean {
+    // Check if there are destroyed bridges and we have engineers
+    const hasEngineers = ctx.aiPlayer.units.some(u => u.data.canCapture);
+    const hasDestroyedBridges = ctx.neutralBuildings?.some(b => b.isBridge && b.isBridgeDestroyed) || false;
+    return hasEngineers && hasDestroyedBridges;
+  }
+
+  private createRepairBridgeSequence(): BehaviorNode {
+    return new ActionNode('repair_bridge', 'Repair Destroyed Bridge', (ctx) => {
+      const actions: AIAction[] = [];
+      const destroyedBridges = ctx.neutralBuildings?.filter(b => b.isBridge && b.isBridgeDestroyed) || [];
+
+      for (const bridge of destroyedBridges) {
+        // Find nearest engineer
+        const engineers = ctx.aiPlayer.units.filter(u =>
+          u.data.canCapture && u.state === UnitState.IDLE
+        );
+        if (engineers.length > 0) {
+          let nearestEngineer = engineers[0];
+          let nearestDist = Infinity;
+          for (const eng of engineers) {
+            const dist = getDistance(eng.position, bridge.position);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestEngineer = eng;
+            }
+          }
+          actions.push({
+            type: 'repairBridge' as AIActionType,
+            unitId: nearestEngineer.id,
+            buildingId: bridge.id,
+            priority: 5
+          });
+        }
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
   }
 }

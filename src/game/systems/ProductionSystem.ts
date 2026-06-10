@@ -1,10 +1,20 @@
 import type { Player, Unit, Faction, Vector2, Building } from '../../types';
-import { Difficulty, UnitState, UnitType } from '../../types';
+import { Difficulty, UnitState, UnitType, BuildingType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { AI_CONFIG } from '../config/AIConfig';
 import { gameEventBus } from './GameEventBus';
 import { useGameStore } from '../../store/gameStore';
 import { mapManager } from '../map/MapManager';
+
+// Infantry types that can be cloned by Cloning Vats
+const CLONEABLE_INFANTRY = new Set<UnitType>([
+  UnitType.SOLDIER, UnitType.ROCKET, UnitType.SNIPER, UnitType.SEAL,
+  UnitType.TANYA, UnitType.CONSCRIPT, UnitType.FLAKINFANTRY,
+  UnitType.TERRORIST, UnitType.IVAN, UnitType.ENGINEER, UnitType.CHRONO,
+  UnitType.GI, UnitType.GUARDIAN_GI, UnitType.BRUTE,
+]);
+
+const INDUSTRIAL_PLANT_DISCOUNT = 0.75; // 25% cost reduction for vehicles
 
 export class ProductionSystem {
   /**
@@ -120,6 +130,25 @@ export class ProductionSystem {
             player.units.push(newUnit);
             player.statistics.unitsProduced++;
             gameEventBus.emit('unit:produced', { unitType: building.producingUnit, faction: building.faction, position: spawnPos });
+
+            // Cloning Vats: free clone of infantry units
+            if (CLONEABLE_INFANTRY.has(building.producingUnit) && player.units.length < maxUnits) {
+              const hasCloningVats = player.buildings.some(
+                b => b.type === BuildingType.CLONING_VATS && b.isConstructed && b.isPowered
+              );
+              if (hasCloningVats) {
+                const clonePos = this.findSpawnPosition(building, player, building.producingUnit);
+                const cloneUnit = createUnit(building.producingUnit, building.faction, clonePos);
+                if (building.rallyPoint) {
+                  cloneUnit.state = UnitState.MOVING;
+                  cloneUnit.waypoints = [{ ...building.rallyPoint }];
+                }
+                player.units.push(cloneUnit);
+                player.statistics.unitsProduced++;
+                gameEventBus.emit('unit:produced', { unitType: building.producingUnit, faction: building.faction, position: clonePos });
+              }
+            }
+
             building.producingUnit = null;
 
             // Remove completed item from queue

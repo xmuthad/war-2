@@ -38,6 +38,8 @@ export interface UnitRenderState {
   maxHealth: number;
   rank: UnitRank;
   isInvulnerable?: boolean;
+  isDeploying?: boolean;
+  deployTimer?: number;
 }
 
 export interface BuildingRenderState {
@@ -133,6 +135,9 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
   private buildingHealthBars: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private unitGroupBadges: Map<string, Phaser.GameObjects.Text> = new Map();
   private powerWarningIcons: Map<string, Phaser.GameObjects.Text> = new Map();
+  private garrisonIndicators: Map<string, Phaser.GameObjects.Container> = new Map();
+  private bridgeDestroyedOverlays: Map<string, Phaser.GameObjects.Container> = new Map();
+  private psychicSensorRings: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private movePreviewLine: Phaser.GameObjects.Graphics | null = null;
   private isRightMouseDown: boolean = false;
   private terrainLayer!: Phaser.GameObjects.Container;
@@ -620,6 +625,7 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.updateSoundCameraPosition();
     this.soundManager?.update(time);
     this.updateFogOfWar(time);
+    this.updatePsychicSensorRings();
   }
 
   private renderPlacementPreview(): void {
@@ -833,7 +839,7 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
         if (state.rank !== UnitRank.ROOKIE) {
           const badgeY = sprite.y - RENDER_CONFIG.unitHealthBarOffsetY - 10;
           const badgeX = sprite.x;
-          const rankColor = state.rank === UnitRank.ELITE ? 0xff4444 : 0xffd700;
+          const rankColor = 0xffd700;
           graphics.fillStyle(rankColor, 1);
           // Draw star shape
           const starSize = 4;
@@ -853,6 +859,15 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
             state.health,
             state.maxHealth
           );
+        }
+
+        // Draw deploy progress bar when unit is deploying
+        if (state.isDeploying && state.deployTimer !== undefined) {
+          const deployTotalTime = 5000; // 5 seconds default deploy time
+          const deployElapsed = deployTotalTime - state.deployTimer;
+          const deployProgress = Math.max(0, Math.min(1, deployElapsed / deployTotalTime));
+          const barY = sprite.y - RENDER_CONFIG.unitHealthBarOffsetY - (state.health < state.maxHealth ? RENDER_CONFIG.healthBarHeight + 4 : 0);
+          this.drawDeployBar(graphics, sprite.x, barY, deployProgress);
         }
       }
     });
@@ -980,6 +995,28 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     const pulse = 0.8 + Math.sin(this.time.now / 200) * 0.2;
     graphics.fillStyle(0xff6600, pulse);
     graphics.fillRect(x - width / 2, y, width * capturePercent, height);
+  }
+
+  private drawDeployBar(
+    graphics: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    progress: number
+  ): void {
+    const { healthBarWidth: width } = RENDER_CONFIG;
+    const height = 4;
+    const deployPercent = Math.max(0, Math.min(1, progress));
+
+    graphics.fillStyle(HEALTH_BAR_COLORS.background, HEALTH_BAR_COLORS.backgroundAlpha);
+    graphics.fillRect(x - width / 2 - 1, y - 1, width + 2, height + 2);
+
+    graphics.fillStyle(0x1a1a1a, 1);
+    graphics.fillRect(x - width / 2, y, width, height);
+
+    // Blue pulsing color for deploy progress
+    const pulse = 0.8 + Math.sin(this.time.now / 300) * 0.2;
+    graphics.fillStyle(0x44aaff, pulse);
+    graphics.fillRect(x - width / 2, y, width * deployPercent, height);
   }
 
   private drawStar(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, size: number): void {
@@ -1199,6 +1236,9 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       this.tweens.killTweensOf(icon);
       icon.destroy();
     });
+    this.garrisonIndicators.forEach(indicator => indicator.destroy());
+    this.bridgeDestroyedOverlays.forEach(overlay => overlay.destroy());
+    this.psychicSensorRings.forEach(ring => ring.destroy());
 
     this.unitSprites.clear();
     this.buildingSprites.clear();
@@ -1206,6 +1246,9 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.buildingHealthBars.clear();
     this.unitGroupBadges.clear();
     this.powerWarningIcons.clear();
+    this.garrisonIndicators.clear();
+    this.bridgeDestroyedOverlays.clear();
+    this.psychicSensorRings.clear();
     this.unitStates.clear();
     this.buildingStates.clear();
 
@@ -1316,8 +1359,11 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       return;
     }
 
-    // Spy Satellite: reveal entire map
-    if (player.researchedUpgrades.includes(UpgradeType.SPY_SATELLITE)) {
+    // Spy Satellite: reveal entire map (upgrade-based or building-based)
+    const hasSpySatelliteBuilding = player.buildings.some(
+      b => b.type === BuildingType.SPY_SATELLITE && b.isConstructed && b.isPowered
+    );
+    if (player.researchedUpgrades.includes(UpgradeType.SPY_SATELLITE) || hasSpySatelliteBuilding) {
       this.fogOfWar.revealAll();
       this.fogOfWar.update(time);
       return;
@@ -1344,7 +1390,56 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       this.fogOfWar.addObserver(tileX, tileY, visionRadius * visionModifier);
     }
 
+    // Update gap generators from enemy players - they hide areas from this player's vision
+    const allPlayers = [store.currentPlayer, ...store.aiPlayers].filter(Boolean);
+    const enemyBuildings: Array<{
+      id: string;
+      position: { x: number; y: number };
+      isConstructed: boolean;
+      isPowered: boolean;
+      type: string;
+      faction: string;
+    }> = [];
+    for (const p of allPlayers) {
+      if (p.id === player.id) continue;
+      if (player.teamId !== undefined && p.teamId === player.teamId) continue;
+      for (const b of p.buildings) {
+        enemyBuildings.push({
+          id: b.id,
+          position: {
+            x: Math.floor(b.position.x / GAME_CONFIG.TILE_SIZE),
+            y: Math.floor(b.position.y / GAME_CONFIG.TILE_SIZE),
+          },
+          isConstructed: b.isConstructed,
+          isPowered: b.isPowered,
+          type: b.type,
+          faction: b.faction,
+        });
+      }
+    }
+    this.fogOfWar.updateGapGenerators(enemyBuildings);
+
     this.fogOfWar.update(time);
+  }
+
+  private updatePsychicSensorRings(): void {
+    this.psychicSensorRings.forEach((ring, id) => {
+      const sprite = this.buildingSprites.get(id);
+      if (!sprite) return;
+      ring.clear();
+      // Pulsing alpha for the detection ring
+      const pulse = 0.15 + 0.1 * Math.sin(this.time.now / 800);
+      const detectionRadius = 60;
+      ring.lineStyle(2, 0xcc44ff, pulse);
+      ring.strokeCircle(0, 0, detectionRadius);
+      // Inner faint fill
+      ring.fillStyle(0xcc44ff, pulse * 0.15);
+      ring.fillCircle(0, 0, detectionRadius);
+      // Secondary pulsing ring (delayed phase)
+      const pulse2 = 0.08 + 0.06 * Math.sin(this.time.now / 800 + Math.PI);
+      ring.lineStyle(1, 0xcc44ff, pulse2);
+      ring.strokeCircle(0, 0, detectionRadius * 0.7);
+    });
   }
 
   private initializePathfinding(mapData: GameMapData): void {
@@ -1655,12 +1750,19 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     const direction = rotationToDirectionIndex(rotation);
     const currentState = this.unitStates.get(id);
 
+    // Look up deploy state from store
+    const unitStore = useGameStore.getState();
+    const allUnitPlayers = [unitStore.currentPlayer, ...unitStore.aiPlayers].filter(Boolean) as Player[];
+    const unitData = allUnitPlayers.flatMap(p => p.units).find(u => u.id === id);
+
     this.unitStates.set(id, {
       direction,
       isSelected: currentState?.isSelected || false,
       health: currentState?.health || 100,
       maxHealth: currentState?.maxHealth || 100,
-      rank: currentState?.rank || UnitRank.ROOKIE
+      rank: currentState?.rank || UnitRank.ROOKIE,
+      isDeploying: unitData?.isDeploying || false,
+      deployTimer: unitData?.deployTimer,
     });
     this.healthBarsDirty = true;
 
@@ -1811,6 +1913,132 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       }
     }
 
+    // --- Garrison indicator: show count badge when building has garrisoned units ---
+    const store = useGameStore.getState();
+    const allPlayers = [store.currentPlayer, ...store.aiPlayers].filter(Boolean) as Player[];
+    const buildingData = allPlayers.flatMap(p => p.buildings).find(b => b.id === id);
+    const garrisonCount = buildingData?.garrisonedUnits?.length || 0;
+
+    if (garrisonCount > 0) {
+      let indicator = this.garrisonIndicators.get(id);
+      if (!indicator) {
+        indicator = this.add.container(worldX, worldY);
+        indicator.setDepth(RENDER_CONFIG.healthBarDepth);
+        indicator.setName('garrison_indicator');
+        // Background circle
+        const bg = this.add.circle(0, 0, 8, 0x000000, 0.7);
+        bg.setStrokeStyle(1, 0x00ff88, 0.8);
+        indicator.add(bg);
+        // Count text
+        const countText = this.add.text(0, 0, String(garrisonCount), {
+          fontSize: '10px',
+          color: '#00ff88',
+          fontStyle: 'bold',
+          fontFamily: 'Arial',
+        });
+        countText.setOrigin(0.5, 0.5);
+        indicator.add(countText);
+        this.garrisonIndicators.set(id, indicator);
+      } else {
+        indicator.setPosition(worldX, worldY);
+        // Update count text
+        const countText = indicator.getAt(1) as Phaser.GameObjects.Text;
+        if (countText) {
+          countText.setText(String(garrisonCount));
+        }
+      }
+      // Position at top-right corner of building sprite
+      const bState = this.buildingStates.get(id);
+      if (bState) {
+        indicator.setPosition(worldX + bState.width * 0.35, worldY - bState.height * 0.65);
+      }
+    } else {
+      const existingIndicator = this.garrisonIndicators.get(id);
+      if (existingIndicator) {
+        existingIndicator.destroy();
+        this.garrisonIndicators.delete(id);
+      }
+    }
+
+    // --- Bridge destroyed visual: red tint + X mark overlay ---
+    if (buildingData?.isBridge && buildingData?.isBridgeDestroyed) {
+      // Tint the sprite red/dark
+      if (sprite instanceof Phaser.GameObjects.Image) {
+        sprite.setTint(0x882222);
+        sprite.setAlpha(0.6);
+      }
+
+      let overlay = this.bridgeDestroyedOverlays.get(id);
+      if (!overlay) {
+        overlay = this.add.container(worldX, worldY);
+        overlay.setDepth(RENDER_CONFIG.healthBarDepth);
+        overlay.setName('bridge_destroyed_overlay');
+        // X mark
+        const xGfx = this.add.graphics();
+        xGfx.lineStyle(3, 0xff2222, 0.9);
+        const s = 14;
+        xGfx.beginPath();
+        xGfx.moveTo(-s, -s);
+        xGfx.lineTo(s, s);
+        xGfx.moveTo(s, -s);
+        xGfx.lineTo(-s, s);
+        xGfx.strokePath();
+        overlay.add(xGfx);
+        // "DESTROYED" text
+        const label = this.add.text(0, 20, 'DESTROYED', {
+          fontSize: '8px',
+          color: '#ff4444',
+          fontStyle: 'bold',
+          fontFamily: 'Arial',
+          stroke: '#000000',
+          strokeThickness: 2,
+        });
+        label.setOrigin(0.5, 0.5);
+        overlay.add(label);
+        this.bridgeDestroyedOverlays.set(id, overlay);
+      } else {
+        overlay.setPosition(worldX, worldY);
+      }
+    } else {
+      const existingOverlay = this.bridgeDestroyedOverlays.get(id);
+      if (existingOverlay) {
+        existingOverlay.destroy();
+        this.bridgeDestroyedOverlays.delete(id);
+      }
+    }
+
+    // --- Psychic sensor detection ring: pulsing circle when constructed + powered ---
+    if (type === BuildingType.PSYCHIC_SENSOR && isConstructed && isPowered) {
+      let ring = this.psychicSensorRings.get(id);
+      if (!ring) {
+        ring = this.add.graphics();
+        ring.setDepth(worldY - 2);
+        ring.setName('psychic_sensor_ring');
+        this.psychicSensorRings.set(id, ring);
+      }
+      ring.setPosition(worldX, worldY);
+      ring.setDepth(worldY - 2);
+      ring.clear();
+      // Pulsing alpha for the detection ring
+      const pulse = 0.15 + 0.1 * Math.sin(this.time.now / 800);
+      const detectionRadius = 60; // detection range in render pixels
+      ring.lineStyle(2, 0xcc44ff, pulse);
+      ring.strokeCircle(0, 0, detectionRadius);
+      // Inner faint fill
+      ring.fillStyle(0xcc44ff, pulse * 0.15);
+      ring.fillCircle(0, 0, detectionRadius);
+      // Secondary pulsing ring (delayed phase)
+      const pulse2 = 0.08 + 0.06 * Math.sin(this.time.now / 800 + Math.PI);
+      ring.lineStyle(1, 0xcc44ff, pulse2);
+      ring.strokeCircle(0, 0, detectionRadius * 0.7);
+    } else {
+      const existingRing = this.psychicSensorRings.get(id);
+      if (existingRing) {
+        existingRing.destroy();
+        this.psychicSensorRings.delete(id);
+      }
+    }
+
     // Detect construction completion transition and play animation
     const prevState = this.buildingStates.get(id);
     if (prevState && !prevState.isConstructed && isConstructed) {
@@ -1867,6 +2095,21 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       this.tweens.killTweensOf(powerIcon);
       powerIcon.destroy();
       this.powerWarningIcons.delete(id);
+    }
+    const garrisonIndicator = this.garrisonIndicators.get(id);
+    if (garrisonIndicator) {
+      garrisonIndicator.destroy();
+      this.garrisonIndicators.delete(id);
+    }
+    const bridgeOverlay = this.bridgeDestroyedOverlays.get(id);
+    if (bridgeOverlay) {
+      bridgeOverlay.destroy();
+      this.bridgeDestroyedOverlays.delete(id);
+    }
+    const psychicRing = this.psychicSensorRings.get(id);
+    if (psychicRing) {
+      psychicRing.destroy();
+      this.psychicSensorRings.delete(id);
     }
     this.buildingStates.delete(id);
   }

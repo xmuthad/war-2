@@ -299,7 +299,7 @@ function createRiverMap(width: number, height: number): GameMapData {
   for (let y = Math.floor(height / 2) - 1; y <= Math.floor(height / 2) + 1; y++) {
     const bridgeX = riverCenterX + Math.floor(Math.sin(y * 0.3) * 2);
     if (bridgeX >= 0 && bridgeX < width) {
-      tiles[y][bridgeX] = makeTile(TileType.ROAD);
+      tiles[y][bridgeX] = makeTile(TileType.BRIDGE);
     }
   }
 
@@ -308,7 +308,7 @@ function createRiverMap(width: number, height: number): GameMapData {
   for (let y = bridge2Y - 1; y <= bridge2Y + 1; y++) {
     const bridgeX = riverCenterX + Math.floor(Math.sin(y * 0.3) * 2);
     if (bridgeX >= 0 && bridgeX < width && y >= 0 && y < height) {
-      tiles[y][bridgeX] = makeTile(TileType.ROAD);
+      tiles[y][bridgeX] = makeTile(TileType.BRIDGE);
     }
   }
 

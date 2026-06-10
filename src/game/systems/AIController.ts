@@ -294,6 +294,34 @@ export class AIController {
             return true;
           }
           break;
+
+        case 'garrison':
+          if (action.unitId && action.buildingId) {
+            useGameStore.getState().garrisonUnit(action.unitId, action.buildingId);
+            return true;
+          }
+          break;
+
+        case 'ungarrison':
+          if (action.buildingId) {
+            useGameStore.getState().ungarrisonBuilding(action.buildingId);
+            return true;
+          }
+          break;
+
+        case 'deploy':
+          if (action.unitId) {
+            useGameStore.getState().startDeploy(action.unitId);
+            return true;
+          }
+          break;
+
+        case 'repairBridge':
+          if (action.buildingId) {
+            useGameStore.getState().repairBridge(action.buildingId);
+            return true;
+          }
+          break;
       }
 
       return false;

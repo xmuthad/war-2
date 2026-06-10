@@ -197,6 +197,12 @@ export enum UnitType {
   BOOMER = 'boomer',
   GATTLING_TANK = 'gattling_tank',
   SLAVE_MINER = 'slave_miner',
+  DOLPHIN = 'dolphin',
+  SQUID = 'squid',
+  CARRIER = 'carrier',
+  V3_ROCKET = 'v3_rocket',
+  CHRONO_MINER = 'chrono_miner',
+  HARRIER = 'harrier',
 }
 
 export enum BuildingType {
@@ -233,6 +239,12 @@ export enum BuildingType {
   CIVILIAN_BUILDING = 'civilian_building',
   BRIDGE = 'bridge',
   BRIDGE_DESTROYED = 'bridge_destroyed',
+  GAP_GENERATOR = 'gap_generator',
+  NUCLEAR_REACTOR = 'nuclear_reactor',
+  FLAK_CANNON = 'flak_cannon',
+  SPY_SATELLITE = 'spy_satellite',
+  ORE_PURIFIER = 'ore_purifier',
+  GRAND_CANNON = 'grand_cannon',
 }
 
 export enum TileType {
@@ -338,6 +350,7 @@ export interface UnitData {
   deployBuildingType?: BuildingType; // What building type to deploy into
   deployTime?: number;           // Time to deploy in seconds
   canGarrison?: boolean;         // Can this unit garrison buildings
+  cargoCapacity?: number;        // Max ore/resources this unit can carry (harvesters)
 }
 
 export interface BuildingData {
@@ -364,6 +377,8 @@ export interface BuildingData {
   isBridge?: boolean;
   // Height system
   elevationLevel?: number;
+  // Description
+  description?: string;
 }
 
 export interface Tile {
@@ -455,6 +470,8 @@ export interface Unit {
   isReturningToBase?: boolean;   // Aircraft returning to helipad/airfield to rearm
   _buffUntil?: number;           // gameTime when attack buff expires
   _debuffUntil?: number;         // gameTime when attack debuff expires
+  _psychicDetectedUntil?: number; // gameTime when psychic sensor detection expires
+  _spyRevealedUntil?: number;    // gameTime when spy map reveal expires
   // Garrison system
   garrisonedBuildingId?: string; // ID of building this unit is garrisoned in
   // MCV deploy system
@@ -517,7 +534,9 @@ export interface Building {
   isBridgeDestroyed?: boolean;        // Is the bridge destroyed
   bridgeTilePositions?: Vector2[];    // Tile positions this bridge covers
   // Height system
-  elevationLevel?: number;            // Building elevation (0=ground, 1=cliff top, etc.)
+  elevationLevel?: number;
+  // Description
+  description?: string;
 }
 
 export interface BuildQueueItem {
@@ -558,6 +577,11 @@ export interface Player {
   teamId?: number;
   statistics: PlayerStatistics;
   _tempSpySatelliteUntil?: number;  // gameTime when temporary spy satellite vision expires
+  spyInfiltrationBuffs?: {
+    veteranInfantry: boolean;
+    veteranVehicles: boolean;
+    mapRevealedUntil: number;
+  };
 }
 
 export interface PlayerSlot {

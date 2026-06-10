@@ -4,6 +4,7 @@ import { GAME_CONFIG } from '../config/GameConfig';
 import { mapManager } from '../map/MapManager';
 import { useGameStore } from '../../store/gameStore';
 import { PathfindingManager } from './PathfindingManager';
+import { terrainHeightSystem } from './TerrainHeightSystem';
 
 function getDirectionFromDelta(dx: number, dy: number): number {
   return Math.atan2(dy, dx);
@@ -206,7 +207,22 @@ export class MovementSystem {
         const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime * weatherSpeedModifier;
         const movementCost = mapManager.getMovementCostAtPosition(unit.position.x, unit.position.y);
         const costFactor = movementCost > 0 ? 1 / movementCost : 1;
-        const adjustedSpeed = moveSpeed * costFactor;
+        // Terrain height penalty: uphill movement is slower
+        let heightPenalty = 1;
+        const map = useGameStore.getState().map;
+        if (map && !unit.isAirborne) {
+          const targetPos = unit.waypoints.length > 0 ? unit.waypoints[0] : null;
+          if (targetPos) {
+            heightPenalty = terrainHeightSystem.getMovementPenalty(unit.position, targetPos, map);
+            if (heightPenalty === Infinity) {
+              // Impassable cliff - stop and clear waypoints
+              unit.waypoints = [];
+              unit.state = UnitState.IDLE;
+              return;
+            }
+          }
+        }
+        const adjustedSpeed = moveSpeed * costFactor / heightPenalty;
         const ratio = Math.min(1, adjustedSpeed / dist);
         let newX = unit.position.x + dx * ratio;
         let newY = unit.position.y + dy * ratio;
@@ -326,7 +342,22 @@ export class MovementSystem {
         const moveSpeed = unit.speed * GAME_CONFIG.TILE_SIZE * deltaTime * weatherSpeedModifier;
         const movementCost = mapManager.getMovementCostAtPosition(unit.position.x, unit.position.y);
         const costFactor = movementCost > 0 ? 1 / movementCost : 1;
-        const adjustedSpeed = moveSpeed * costFactor;
+        // Terrain height penalty: uphill movement is slower
+        let heightPenalty = 1;
+        const map = useGameStore.getState().map;
+        if (map && !unit.isAirborne) {
+          const targetPos = unit.waypoints.length > 0 ? unit.waypoints[0] : null;
+          if (targetPos) {
+            heightPenalty = terrainHeightSystem.getMovementPenalty(unit.position, targetPos, map);
+            if (heightPenalty === Infinity) {
+              // Impassable cliff - stop and clear waypoints
+              unit.waypoints = [];
+              unit.state = UnitState.IDLE;
+              return;
+            }
+          }
+        }
+        const adjustedSpeed = moveSpeed * costFactor / heightPenalty;
         const ratio = Math.min(1, adjustedSpeed / dist);
         const newX = unit.position.x + dx * ratio;
         const newY = unit.position.y + dy * ratio;

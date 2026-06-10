@@ -39,7 +39,9 @@ export type GameEventType =
   | 'map:reveal'
   | 'camera:centerOn'
   | 'sound:play'
-  | 'settings:volumeChanged';
+  | 'settings:volumeChanged'
+  | 'radiation:deploy'
+  | 'nuclear:explosion';
 
 export interface GameEvent {
   type: GameEventType;

@@ -3,6 +3,8 @@ import type { Unit, Player, ResourceNode, GameMapData } from '../../types';
 import { UnitType, UnitState, BuildingType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { gameEventBus } from '../systems/GameEventBus';
+import { ivanBombSystem } from '../systems/IvanBombSystem';
+import { radiationSystem } from '../systems/RadiationSystem';
 
 const INFANTRY_TYPES = new Set([
   UnitType.SOLDIER, UnitType.ROCKET, UnitType.SNIPER, UnitType.SEAL,
@@ -10,7 +12,7 @@ const INFANTRY_TYPES = new Set([
   UnitType.TERRORIST, UnitType.IVAN, UnitType.ENGINEER, UnitType.CHRONO,
 ]);
 
-export type PendingCommand = null | 'attackMove' | 'patrol' | 'capture' | 'harvest' | 'rally' | 'superweapon_nuke' | 'superweapon_ironcurtain' | 'superweapon_chronosphere' | 'superweapon_chronosphere_target';
+export type PendingCommand = null | 'attackMove' | 'patrol' | 'capture' | 'harvest' | 'rally' | 'garrison' | 'ivanBomb' | 'superweapon_nuke' | 'superweapon_ironcurtain' | 'superweapon_chronosphere' | 'superweapon_chronosphere_target';
 
 export class InputHandler {
   private pendingCommand: PendingCommand = null;
@@ -150,6 +152,31 @@ export class InputHandler {
         return;
       }
 
+      // IVAN bomb placement: if pending command is ivanBomb or IVAN selected, move to target and place bomb
+      const ivanUnits = selectedUnits.filter(u => u.type === UnitType.IVAN);
+      if (ivanUnits.length > 0 && (this.pendingCommand === 'ivanBomb' || ivanUnits.length === selectedUnits.length)) {
+        for (const ivan of ivanUnits) {
+          const dx = ivan.position.x - targetUnit.position.x;
+          const dy = ivan.position.y - targetUnit.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const maxRange = 1.5 * GAME_CONFIG.TILE_SIZE;
+          if (dist <= maxRange) {
+            // In range: place bomb directly
+            ivanBombSystem.placeBomb(ivan, targetUnit, store);
+          } else {
+            // Out of range: move to target first, CombatUpdateSystem will place bomb when in range
+            attackUnit(ivan.id, targetUnit.id);
+          }
+        }
+        // Handle non-IVAN units in selection normally
+        const nonIvanUnits = selectedUnits.filter(u => u.type !== UnitType.IVAN && u.data.attack > 0);
+        for (const unit of nonIvanUnits) {
+          attackUnit(unit.id, targetUnit.id);
+        }
+        this.pendingCommand = null;
+        return;
+      }
+
       for (const unit of selectedUnits) {
         if (unit.data.attack > 0) {
           attackUnit(unit.id, targetUnit.id);
@@ -161,9 +188,47 @@ export class InputHandler {
     // Check if clicking on an enemy building
     const targetBuilding = this.findBuildingAtPosition(worldX, worldY, aiPlayers);
     if (targetBuilding) {
-      for (const unit of selectedUnits) {
-        if (unit.data.attack > 0 && !unit.data.canCapture) {
+      // IVAN bomb placement on buildings
+      const ivanUnits = selectedUnits.filter(u => u.type === UnitType.IVAN);
+      if (ivanUnits.length > 0 && (this.pendingCommand === 'ivanBomb' || ivanUnits.length === selectedUnits.length)) {
+        for (const ivan of ivanUnits) {
+          const dx = ivan.position.x - targetBuilding.position.x;
+          const dy = ivan.position.y - targetBuilding.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const maxRange = 1.5 * GAME_CONFIG.TILE_SIZE;
+          if (dist <= maxRange) {
+            ivanBombSystem.placeBomb(ivan, targetBuilding, store);
+          } else {
+            attackUnit(ivan.id, targetBuilding.id);
+          }
+        }
+        const nonIvanUnits = selectedUnits.filter(u => u.type !== UnitType.IVAN && u.data.attack > 0 && !u.data.canCapture);
+        for (const unit of nonIvanUnits) {
           attackUnit(unit.id, targetBuilding.id);
+        }
+        this.pendingCommand = null;
+        return;
+      }
+
+      for (const unit of selectedUnits) {
+        // SPY units: move toward building with infiltrate intent instead of attacking
+        if (unit.type === UnitType.SPY) {
+          store.moveUnit(unit.id, { x: worldX, y: worldY });
+          // Track infiltrate intent on the spy unit
+          store.setSpyInfiltrateTarget(unit.id, targetBuilding.id);
+        } else if (unit.data.attack > 0 && !unit.data.canCapture) {
+          attackUnit(unit.id, targetBuilding.id);
+        }
+      }
+      return;
+    }
+
+    // Check if clicking on a garrisonable building (friendly or neutral) with infantry
+    const garrisonBuilding = this.findGarrisonableBuildingAtPosition(worldX, worldY, store);
+    if (garrisonBuilding && selectedUnits.some(u => INFANTRY_TYPES.has(u.type) && u.data.canGarrison)) {
+      for (const unit of selectedUnits) {
+        if (INFANTRY_TYPES.has(unit.type) && unit.data.canGarrison) {
+          store.garrisonUnit(unit.id, garrisonBuilding.id);
         }
       }
       return;
@@ -200,8 +265,18 @@ export class InputHandler {
     }
 
     // Default: move in formation
-    const unitIds = selectedUnits.map(u => u.id);
-    store.moveUnitsToTarget(unitIds, { x: worldX, y: worldY });
+    // CHRONO units use teleport instead of walking (speed=0)
+    const chronoUnits = selectedUnits.filter(u => u.type === UnitType.CHRONO && !u.isChronoCooldown);
+    const nonChronoUnits = selectedUnits.filter(u => u.type !== UnitType.CHRONO);
+
+    for (const unit of chronoUnits) {
+      store.moveUnit(unit.id, { x: worldX, y: worldY });
+    }
+
+    if (nonChronoUnits.length > 0) {
+      const nonChronoIds = nonChronoUnits.map(u => u.id);
+      store.moveUnitsToTarget(nonChronoIds, { x: worldX, y: worldY });
+    }
   }
 
   handleKeyDown(key: string, event?: KeyboardEvent): void {
@@ -254,6 +329,52 @@ export class InputHandler {
     if (key === 'c' || key === 'C') {
       if (store.selectedUnits.some(u => u.data.canCapture)) {
         this.pendingCommand = 'capture';
+      }
+      return;
+    }
+
+    // Bomb command (B key for Ivan)
+    if (key === 'b' || key === 'B') {
+      if (store.selectedUnits.some(u => u.type === UnitType.IVAN)) {
+        this.pendingCommand = 'ivanBomb';
+      }
+      return;
+    }
+
+    // Garrison/Ungarrison command (G key)
+    if (key === 'g' || key === 'G') {
+      // If selected building has garrisoned units, ungarrison
+      if (store.selectedBuilding && store.selectedBuilding.garrisonedUnits && store.selectedBuilding.garrisonedUnits.length > 0) {
+        store.ungarrisonBuilding(store.selectedBuilding.id);
+      } else if (store.selectedUnits.some(u => u.data.canGarrison)) {
+        // Set garrison pending command for infantry
+        this.pendingCommand = 'garrison';
+      }
+      return;
+    }
+
+    // Deploy command (D key for MCV / Desolator radiation)
+    if (key === 'd' || key === 'D') {
+      // Desolator radiation deployment toggle
+      const desolatorUnits = store.selectedUnits.filter(u => u.data.special === '辐射部署');
+      if (desolatorUnits.length > 0) {
+        for (const desolator of desolatorUnits) {
+          if (radiationSystem.isDeployed(desolator.id)) {
+            // Already deployed: undeploy
+            radiationSystem.undeployRadiation(desolator.id);
+            desolator.isDeploying = false;
+          } else {
+            // Deploy radiation field
+            radiationSystem.deployRadiation(desolator, store);
+          }
+        }
+        return;
+      }
+      if (store.selectedUnits.some(u => u.data.canDeploy)) {
+        const deployUnit = store.selectedUnits.find(u => u.data.canDeploy);
+        if (deployUnit) {
+          store.startDeploy(deployUnit.id);
+        }
       }
       return;
     }
@@ -512,6 +633,37 @@ export class InputHandler {
           store.moveUnit(unit.id, { x: worldX, y: worldY });
         }
       }
+    } else if (this.pendingCommand === 'garrison') {
+      // Garrison: find a garrisonable building at click position
+      const garrisonBuilding = this.findGarrisonableBuildingAtPosition(worldX, worldY, store);
+      if (garrisonBuilding) {
+        for (const unit of selectedUnits) {
+          if (INFANTRY_TYPES.has(unit.type) && unit.data.canGarrison) {
+            store.garrisonUnit(unit.id, garrisonBuilding.id);
+          }
+        }
+      }
+    } else if (this.pendingCommand === 'ivanBomb') {
+      // Ivan bomb: find a unit or building at click position and place bomb
+      const { currentPlayer, aiPlayers } = store;
+      const bombTargetUnit = this.findUnitAtPosition(worldX, worldY, currentPlayer, aiPlayers);
+      const bombTargetBuilding = this.findBuildingAtPosition(worldX, worldY, aiPlayers);
+      const bombTarget = bombTargetUnit ?? bombTargetBuilding;
+      if (bombTarget) {
+        for (const unit of selectedUnits) {
+          if (unit.type === UnitType.IVAN) {
+            const dx = unit.position.x - bombTarget.position.x;
+            const dy = unit.position.y - bombTarget.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const maxRange = 1.5 * GAME_CONFIG.TILE_SIZE;
+            if (dist <= maxRange) {
+              ivanBombSystem.placeBomb(unit, bombTarget, store);
+            } else {
+              store.attackUnit(unit.id, bombTarget.id);
+            }
+          }
+        }
+      }
     } else if (this.pendingCommand === 'rally') {
       // Set rally point for selected building
       if (selectedBuilding) {
@@ -615,6 +767,21 @@ export class InputHandler {
       const dx = rx - worldX;
       const dy = ry - worldY;
       return Math.sqrt(dx * dx + dy * dy) < GAME_CONFIG.RESOURCE_CLICK_RADIUS;
+    }) || null;
+  }
+
+  private findGarrisonableBuildingAtPosition(worldX: number, worldY: number, store: ReturnType<typeof useGameStore.getState>): import('../../types').Building | null {
+    const allBuildings = [
+      ...(store.currentPlayer?.buildings || []),
+      ...(store.aiPlayers?.flatMap(p => p.buildings) || []),
+      ...(store.neutralBuildings || []),
+    ];
+    return allBuildings.find(b => {
+      if (!b.isGarrisonable) return false;
+      const w = (b.data.width || 2) * GAME_CONFIG.TILE_SIZE;
+      const h = (b.data.height || 2) * GAME_CONFIG.TILE_SIZE;
+      return worldX >= b.position.x && worldX <= b.position.x + w &&
+             worldY >= b.position.y && worldY <= b.position.y + h;
     }) || null;
   }
 }

@@ -2,9 +2,12 @@ import type { Unit, Player, Vector2, Faction, Building } from '../../types';
 import { UnitState, TileType, UnitRank, UnitType, UpgradeType, BuildingType, getFactionGroup } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { combatSystem, TerroristExplosion, DamageType, ArmorType, ProjectileType, SplashConfig, Projectile } from './CombatSystem';
+import { ivanBombSystem } from './IvanBombSystem';
 import { mapManager } from '../map/MapManager';
 import { useGameStore } from '../../store/gameStore';
 import { gameEventBus } from './GameEventBus';
+import { terrainHeightSystem } from './TerrainHeightSystem';
+import { garrisonSystem } from './GarrisonSystem';
 
 // Buildings that can target airborne units
 const ANTI_AIR_BUILDINGS = new Set<BuildingType>([
@@ -71,6 +74,11 @@ export class CombatUpdateSystem {
   update(unit: Unit, player: Player, allPlayers: Player[], deltaTime: number, destroyUnit: (unitId: string) => void, destroyBuilding: (buildingId: string) => void): void {
     // Skip units inside a transport
     if (unit.transportId) return;
+
+    // Elite units slowly self-heal
+    if (unit.rank === UnitRank.ELITE && unit.health < unit.maxHealth) {
+      unit.health = Math.min(unit.maxHealth, unit.health + unit.maxHealth * GAME_CONFIG.ELITE_HEAL_RATE * deltaTime);
+    }
 
     switch (unit.state) {
       case UnitState.ATTACKING:
@@ -233,7 +241,10 @@ export class CombatUpdateSystem {
     }
 
     const attackDist = distance(unit.position, targetPos);
-    const effectiveRange = unit.attackRange * GAME_CONFIG.TILE_SIZE;
+    const map = useGameStore.getState().map;
+    // Apply terrain height range bonus
+    const heightRangeBonus = map ? terrainHeightSystem.getAttackRangeBonus(unit, map) : 0;
+    const effectiveRange = (unit.attackRange + heightRangeBonus) * GAME_CONFIG.TILE_SIZE;
 
     if (attackDist > effectiveRange) {
       // Use waypoints for pathfinding-aware chase instead of direct movement
@@ -277,7 +288,7 @@ export class CombatUpdateSystem {
         if (unit.type === UnitType.IVAN && (targetUnit || targetBuilding)) {
           const target = targetUnit ?? targetBuilding;
           if (target) {
-            combatSystem.placeBomb(unit, target);
+            ivanBombSystem.placeBomb(unit, target);
             gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: target.id, damage: 0, position: target.position });
           }
           // Ivan does not deal normal attack damage, just places bomb
@@ -311,6 +322,12 @@ export class CombatUpdateSystem {
             const armorType = combatSystem.getArmorTypeForUnit(currentTargetUnit.type);
             const rankMultiplier = getRankDamageMultiplier(unit.rank);
             let baseDamage = unit.attack * rankMultiplier;
+
+            // Terrain height attack bonus
+            if (map && targetUnit) {
+              const heightBonus = terrainHeightSystem.getAttackBonus(unit, currentTargetUnit, map);
+              baseDamage = Math.floor(baseDamage * heightBonus);
+            }
 
             // Tanya C4: 10x damage vs buildings, 5x vs vehicles
             baseDamage = combatSystem.calculateSpecialDamage(unit, currentTargetUnit, baseDamage);
@@ -360,6 +377,24 @@ export class CombatUpdateSystem {
             const armorType = combatSystem.getArmorTypeForBuilding();
             const rankMultiplier2 = getRankDamageMultiplier(unit.rank);
             let baseDamage = unit.attack * rankMultiplier2;
+
+            // Terrain height attack bonus (use building position as target)
+            if (map) {
+              const attackerElevation = terrainHeightSystem.getElevationAt(
+                Math.floor(unit.position.x / GAME_CONFIG.TILE_SIZE),
+                Math.floor(unit.position.y / GAME_CONFIG.TILE_SIZE),
+                map,
+              );
+              const targetElevation = terrainHeightSystem.getElevationAt(
+                Math.floor(currentTargetBuilding.position.x / GAME_CONFIG.TILE_SIZE),
+                Math.floor(currentTargetBuilding.position.y / GAME_CONFIG.TILE_SIZE),
+                map,
+              );
+              const diff = attackerElevation - targetElevation;
+              if (diff > 0) {
+                baseDamage = Math.floor(baseDamage * (1 + diff * terrainHeightSystem.HEIGHT_ATTACK_BONUS));
+              }
+            }
 
             // Tanya C4: 10x damage vs buildings
             baseDamage = combatSystem.calculateSpecialDamage(unit, currentTargetBuilding, baseDamage);
@@ -518,16 +553,23 @@ export class CombatUpdateSystem {
   }
 
   updateBuildingCombat(building: Building, player: Player, allPlayers: Player[], deltaTime: number, destroyUnit: (unitId: string) => void): void {
-    if (!building.attack || building.attack <= 0) return;
     if (!building.isConstructed || !building.isPowered) return;
     if (building.empDisabledUntil && building.empDisabledUntil > useGameStore.getState().gameTime) return;
+
+    // Calculate total attack power: building's own attack + garrisoned units' attack
+    const garrisonAttack = garrisonSystem.getGarrisonedAttackForPlayer(building, player);
+    const totalAttack = (building.attack || 0) + garrisonAttack;
+    if (totalAttack <= 0) return;
 
     const enemyPlayers = allPlayers.filter(p =>
       isEnemy(building.faction, player.teamId, p.faction, p.teamId)
     );
     const enemyUnits = enemyPlayers.flatMap(p => p.units);
 
-    const effectiveRange = (building.attackRange || 5) * GAME_CONFIG.TILE_SIZE;
+    // Garrisoned units get range bonus
+    const garrisonRangeBonus = garrisonAttack > 0 ? garrisonSystem.GARRISON_ATTACK_RANGE_BONUS : 0;
+    const baseRange = building.attackRange || 5;
+    const effectiveRange = (baseRange + garrisonRangeBonus) * GAME_CONFIG.TILE_SIZE;
 
     // Check current target validity
     if (building.attackTarget) {
@@ -602,7 +644,7 @@ export class CombatUpdateSystem {
           const damageType = combatSystem.getDamageTypeForBuilding(building);
           const armorType = combatSystem.getArmorTypeForUnit(targetUnit.type);
           const finalDamage = combatSystem.calculateDamage(
-            building.attack,
+            totalAttack,
             damageType,
             armorType,
             targetUnit.armor
@@ -631,72 +673,11 @@ export class CombatUpdateSystem {
     }
   }
 
-  private sendAircraftToRearm(unit: Unit, player: Player): void {
-    // Find the nearest helipad or airfield belonging to this player
-    const rearmBuildings = player.buildings.filter(b =>
-      b.isConstructed && (b.type === BuildingType.HELIPAD || b.type === BuildingType.AIRFIELD)
-    );
-
-    if (rearmBuildings.length === 0) {
-      // No rearm facility: just go idle
-      unit.state = UnitState.IDLE;
-      unit.target = null;
-      return;
-    }
-
-    // Find closest rearm building
-    let closestBuilding = rearmBuildings[0];
-    let closestDist = distance(unit.position, closestBuilding.position);
-    for (let i = 1; i < rearmBuildings.length; i++) {
-      const d = distance(unit.position, rearmBuildings[i].position);
-      if (d < closestDist) {
-        closestDist = d;
-        closestBuilding = rearmBuildings[i];
-      }
-    }
-
-    // Check if already at the rearm building
-    const rearmDist = distance(unit.position, closestBuilding.position);
-    if (rearmDist < GAME_CONFIG.TILE_SIZE * 2) {
-      // At base: rearm (refill ammo)
-      unit.ammo = unit.data.maxAmmo;
-      unit.isReturningToBase = false;
-      unit.state = UnitState.IDLE;
-      unit.target = null;
-      unit.waypoints = [];
-      return;
-    }
-
-    // Send aircraft back to base
+  private sendAircraftToRearm(unit: Unit, _player: Player): void {
+    // Set flag and state; AircraftAmmoSystem handles waypoint setting and gradual rearm
     unit.isReturningToBase = true;
     unit.state = UnitState.MOVING;
     unit.target = null;
-    unit.waypoints = [{ x: closestBuilding.position.x, y: closestBuilding.position.y }];
-  }
-
-  updateAircraftRearm(player: Player): void {
-    // Check all airborne units with isReturningToBase flag
-    for (const unit of player.units) {
-      if (!unit.isAirborne || !unit.isReturningToBase) continue;
-
-      // Check if near a rearm building
-      const rearmBuildings = player.buildings.filter(b =>
-        b.isConstructed && (b.type === BuildingType.HELIPAD || b.type === BuildingType.AIRFIELD)
-      );
-
-      for (const building of rearmBuildings) {
-        const d = distance(unit.position, building.position);
-        if (d < GAME_CONFIG.TILE_SIZE * 2) {
-          // Rearm: refill ammo
-          unit.ammo = unit.data.maxAmmo;
-          unit.isReturningToBase = false;
-          unit.state = UnitState.IDLE;
-          unit.target = null;
-          unit.waypoints = [];
-          break;
-        }
-      }
-    }
   }
 }
 

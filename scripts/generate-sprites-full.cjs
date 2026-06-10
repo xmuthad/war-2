@@ -958,6 +958,500 @@ function generateApocalypse() {
   return canvas;
 }
 
+function generateAttackDog() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 16);
+      const legAnim = Math.sin(frame * Math.PI/2) * 4;
+
+      const dogColor = [139, 90, 43];
+      const dogDark = [107, 66, 38];
+      const dogLight = [170, 120, 70];
+
+      // 身体
+      drawRect(ctx, -8, -2, 16, 8, dogColor, 0, 0);
+      drawRect(ctx, -6, 0, 12, 4, dogLight, 0, 0);
+
+      // 四条腿
+      drawRect(ctx, -6, 6+legAnim, 3, 6, dogDark, 0, 0);
+      drawRect(ctx, -3, 6-legAnim, 3, 6, dogDark, 0, 0);
+      drawRect(ctx, 3, 6-legAnim, 3, 6, dogDark, 0, 0);
+      drawRect(ctx, 6, 6+legAnim, 3, 6, dogDark, 0, 0);
+
+      // 头部
+      drawRect(ctx, 6, -6, 8, 8, dogColor, 0, 0);
+      drawRect(ctx, 8, -4, 4, 4, dogLight, 0, 0);
+
+      // 鼻子
+      drawRect(ctx, 12, -4, 3, 3, [30, 20, 10], 0, 0);
+
+      // 眼睛
+      drawRect(ctx, 10, -5, 2, 2, [20, 20, 20], 0, 0);
+
+      // 尾巴
+      drawRect(ctx, -10, -2, 4, 3, dogDark, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateMirage() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const camoColors = {
+    primary: [60, 80, 40],
+    secondary: [45, 65, 30],
+    highlight: [80, 110, 55],
+    shadow: [30, 50, 20],
+    accent: [100, 140, 70]
+  };
+  const colors = camoColors;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 28);
+      const trackOffset = frame * 3 % 8;
+
+      drawRect(ctx, -28, -12, 10, 28, COLORS.common.track, 0, 0);
+      for (let i = -12; i < 12; i += 4) {
+        drawRect(ctx, -27, i + trackOffset % 4 - 4, 8, 2, COLORS.common.trackLight, 0, 0);
+      }
+      drawRect(ctx, 18, -12, 10, 28, COLORS.common.track, 0, 0);
+      for (let i = -12; i < 12; i += 4) {
+        drawRect(ctx, 19, i + trackOffset % 4 - 4, 8, 2, COLORS.common.trackLight, 0, 0);
+      }
+
+      drawRect(ctx, -20, -16, 40, 32, colors.primary, 0, 0);
+      drawRect(ctx, -16, -10, 32, 20, colors.secondary, 0, 0);
+      drawRect(ctx, -16, -14, 32, 6, colors.highlight, 0, 0);
+
+      // 迷彩斑点
+      drawRect(ctx, -12, -6, 6, 6, [80, 100, 50], 0, 0);
+      drawRect(ctx, 4, 2, 8, 5, [50, 70, 35], 0, 0);
+      drawRect(ctx, -6, 4, 5, 4, [70, 95, 45], 0, 0);
+
+      // 炮塔
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(colors.secondary);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(colors.highlight);
+      ctx.fill();
+
+      // 伪装炮管
+      drawRect(ctx, 8, -4, 22, 8, COLORS.common.gun, 0, 0);
+      drawRect(ctx, 26, -5, 6, 10, [20,20,20], 0, 0);
+
+      drawRect(ctx, -4, -3, 8, 6, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateGrizzly() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const grizzlyColors = {
+    primary: [68, 120, 170],
+    secondary: [42, 88, 132],
+    highlight: [85, 150, 205],
+    shadow: [28, 72, 118],
+    accent: [120, 190, 225]
+  };
+  const colors = grizzlyColors;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 28);
+      const trackOffset = frame * 3 % 8;
+
+      drawRect(ctx, -28, -12, 10, 28, COLORS.common.track, 0, 0);
+      for (let i = -12; i < 12; i += 4) {
+        drawRect(ctx, -27, i + trackOffset % 4 - 4, 8, 2, COLORS.common.trackLight, 0, 0);
+      }
+      drawRect(ctx, 18, -12, 10, 28, COLORS.common.track, 0, 0);
+      for (let i = -12; i < 12; i += 4) {
+        drawRect(ctx, 19, i + trackOffset % 4 - 4, 8, 2, COLORS.common.trackLight, 0, 0);
+      }
+
+      drawRect(ctx, -20, -16, 40, 32, colors.primary, 0, 0);
+      drawRect(ctx, -16, -10, 32, 20, colors.secondary, 0, 0);
+      drawRect(ctx, -16, -14, 32, 6, colors.highlight, 0, 0);
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(colors.secondary);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(colors.highlight);
+      ctx.fill();
+
+      drawRect(ctx, 8, -4, 22, 8, COLORS.common.gun, 0, 0);
+      drawRect(ctx, 26, -5, 6, 10, [20,20,20], 0, 0);
+
+      drawRect(ctx, -4, -3, 8, 6, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateDreadnought() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.soviet;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 30);
+
+      // 船体
+      ctx.beginPath();
+      ctx.moveTo(-28, 10);
+      ctx.lineTo(-22, -16);
+      ctx.lineTo(22, -16);
+      ctx.lineTo(28, 10);
+      ctx.closePath();
+      ctx.fillStyle = rgba(colors.primary);
+      ctx.fill();
+
+      // 甲板
+      drawRect(ctx, -20, -12, 40, 20, colors.secondary, 0, 0);
+      drawRect(ctx, -18, -10, 36, 16, colors.highlight, 0, 0);
+
+      // 舰桥
+      drawRect(ctx, -10, -14, 20, 10, colors.secondary, 0, 0);
+      drawRect(ctx, -8, -16, 16, 6, colors.highlight, 0, 0);
+
+      // 导弹发射架
+      drawRect(ctx, -22, -6, 8, 4, [80, 80, 80], 0, 0);
+      drawRect(ctx, 14, -6, 8, 4, [80, 80, 80], 0, 0);
+      drawRect(ctx, -20, -10, 4, 6, COLORS.common.gun, 0, 0);
+      drawRect(ctx, 16, -10, 4, 6, COLORS.common.gun, 0, 0);
+
+      // 水线
+      ctx.strokeStyle = rgba([100, 150, 255], 0.5);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-28, 10);
+      ctx.lineTo(28, 10);
+      ctx.stroke();
+
+      drawRect(ctx, -4, -2, 8, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateAegis() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.allied;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 28);
+
+      // 船体
+      ctx.beginPath();
+      ctx.moveTo(-26, 8);
+      ctx.lineTo(-20, -14);
+      ctx.lineTo(20, -14);
+      ctx.lineTo(26, 8);
+      ctx.closePath();
+      ctx.fillStyle = rgba(colors.primary);
+      ctx.fill();
+
+      // 甲板
+      drawRect(ctx, -18, -10, 36, 16, colors.secondary, 0, 0);
+      drawRect(ctx, -16, -8, 32, 12, colors.highlight, 0, 0);
+
+      // 宙斯盾雷达
+      drawRect(ctx, -8, -14, 16, 8, colors.secondary, 0, 0);
+      ctx.beginPath();
+      ctx.arc(0, -14, 10, Math.PI, 0);
+      ctx.fillStyle = rgba(colors.highlight);
+      ctx.fill();
+      ctx.strokeStyle = rgba(colors.accent);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -14, 8, Math.PI, 0);
+      ctx.stroke();
+
+      // 防空导弹架
+      drawRect(ctx, -20, -4, 6, 4, [80, 80, 80], 0, 0);
+      drawRect(ctx, 14, -4, 6, 4, [80, 80, 80], 0, 0);
+
+      // 水线
+      ctx.strokeStyle = rgba([100, 150, 255], 0.5);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-26, 8);
+      ctx.lineTo(26, 8);
+      ctx.stroke();
+
+      drawRect(ctx, -4, -2, 8, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateGuardianGI() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.allied;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 26);
+      const legAnim = Math.sin(frame * Math.PI/2) * 3;
+
+      // 更大的士兵
+      drawRect(ctx, -12, 10+legAnim, 10, 16, COLORS.common.pant, 0, 0);
+      drawRect(ctx, 2, 10-legAnim, 10, 16, COLORS.common.pant, 0, 0);
+      drawRect(ctx, -12, 24+legAnim, 10, 7, COLORS.common.boot, 0, 0);
+      drawRect(ctx, 2, 24-legAnim, 10, 7, COLORS.common.boot, 0, 0);
+
+      drawRect(ctx, -14, -6, 28, 20, colors.primary, 0, 0);
+      drawRect(ctx, -12, 2, 24, 8, colors.secondary, 0, 0);
+      drawRect(ctx, -12, -2, 24, 5, colors.highlight, 0, 0);
+      drawRect(ctx, -14, 10, 28, 5, [74,55,40], 0, 0);
+
+      drawRect(ctx, -7, -16, 14, 14, COLORS.common.skin, 0, 0);
+      drawRect(ctx, -9, -20, 18, 8, COLORS.common.helmet, 0, 0);
+      drawRect(ctx, -7, -22, 14, 5, COLORS.common.helmet, 0, 0);
+      drawRect(ctx, -5, -20, 10, 3, lighten(COLORS.common.helmet,30), 0, 0);
+
+      drawRect(ctx, -5, -12, 4, 2, [40,30,20], 0, 0);
+      drawRect(ctx, 1, -12, 4, 2, [40,30,20], 0, 0);
+
+      // 重型武器
+      drawRect(ctx, 12, -4, 12, 10, colors.primary, 0, 0);
+      drawRect(ctx, 16, -2, 18, 5, COLORS.common.gun, 0, 0);
+      drawRect(ctx, 32, -3, 5, 7, [20,20,20], 0, 0);
+
+      drawRect(ctx, -10, -2, 5, 5, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateBrute() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.soviet;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 26);
+      const legAnim = Math.sin(frame * Math.PI/2) * 3;
+
+      // 更大的苏联士兵
+      drawRect(ctx, -12, 10+legAnim, 10, 16, COLORS.common.pantSoviet, 0, 0);
+      drawRect(ctx, 2, 10-legAnim, 10, 16, COLORS.common.pantSoviet, 0, 0);
+      drawRect(ctx, -12, 24+legAnim, 10, 7, COLORS.common.boot, 0, 0);
+      drawRect(ctx, 2, 24-legAnim, 10, 7, COLORS.common.boot, 0, 0);
+
+      drawRect(ctx, -14, -6, 28, 20, colors.primary, 0, 0);
+      drawRect(ctx, -12, 2, 24, 8, colors.secondary, 0, 0);
+      drawRect(ctx, -12, -2, 24, 5, colors.highlight, 0, 0);
+      drawRect(ctx, -14, 10, 28, 5, [74,55,40], 0, 0);
+
+      drawRect(ctx, -7, -16, 14, 14, COLORS.common.skin, 0, 0);
+      drawRect(ctx, -9, -20, 18, 8, COLORS.common.helmetSoviet, 0, 0);
+      drawRect(ctx, -7, -22, 14, 5, COLORS.common.helmetSoviet, 0, 0);
+      drawRect(ctx, -5, -20, 10, 3, lighten(COLORS.common.helmetSoviet,30), 0, 0);
+
+      drawRect(ctx, -5, -12, 4, 2, [40,30,20], 0, 0);
+      drawRect(ctx, 1, -12, 4, 2, [40,30,20], 0, 0);
+
+      // 大拳头
+      drawRect(ctx, 12, -4, 8, 12, COLORS.common.skin, 0, 0);
+      drawRect(ctx, -20, -4, 8, 12, COLORS.common.skin, 0, 0);
+
+      drawRect(ctx, -10, -2, 5, 5, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateMCV(faction) {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = faction === 'allied' ? COLORS.allied : COLORS.soviet;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 32);
+      const trackOffset = frame * 2 % 8;
+
+      // 重型履带
+      drawRect(ctx, -32, -14, 12, 32, COLORS.common.track, 0, 0);
+      for (let i = -14; i < 14; i += 4) {
+        drawRect(ctx, -31, i + trackOffset % 4 - 4, 10, 2, COLORS.common.trackLight, 0, 0);
+      }
+      drawRect(ctx, 20, -14, 12, 32, COLORS.common.track, 0, 0);
+      for (let i = -14; i < 14; i += 4) {
+        drawRect(ctx, 21, i + trackOffset % 4 - 4, 10, 2, COLORS.common.trackLight, 0, 0);
+      }
+
+      // 大型车身
+      drawRect(ctx, -24, -20, 48, 38, colors.primary, 0, 0);
+      drawRect(ctx, -20, -14, 40, 26, colors.secondary, 0, 0);
+      drawRect(ctx, -20, -18, 40, 8, colors.highlight, 0, 0);
+
+      // 驾驶舱
+      drawRect(ctx, -12, -22, 24, 10, colors.highlight, 0, 0);
+      drawRect(ctx, -8, -20, 8, 6, COLORS.common.glass, 0, 0);
+      drawRect(ctx, 2, -20, 8, 6, COLORS.common.glass, 0, 0);
+
+      // 展开设备
+      drawRect(ctx, -16, -6, 32, 14, [80, 80, 80], 0, 0);
+      drawRect(ctx, -14, -4, 28, 10, [100, 100, 100], 0, 0);
+
+      // 吊臂
+      drawRect(ctx, 14, -16, 4, 20, COLORS.common.gun, 0, 0);
+      drawRect(ctx, 14, -18, 12, 4, COLORS.common.gun, 0, 0);
+
+      drawRect(ctx, -6, -2, 12, 6, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
 // ============ 建筑精灵图生成 ============
 
 function generateBuilding(type, faction) {
@@ -1342,6 +1836,268 @@ function generateBuilding(type, faction) {
     drawRect(ctx, 56, 50, 16, 30, [220, 40, 40]);
     drawRect(ctx, 48, 58, 32, 14, [220, 40, 40]);
   }
+  else if (type === 'patriot') {
+    drawRect(ctx, 30, 50, 68, 50, colors.primary);
+    drawRect(ctx, 32, 52, 64, 46, colors.secondary);
+    // 防空炮塔基座
+    ctx.beginPath();
+    ctx.arc(64, 50, 18, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(colors.secondary);
+    ctx.fill();
+    // 雷达圆盘
+    ctx.beginPath();
+    ctx.arc(64, 25, 16, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(colors.highlight);
+    ctx.fill();
+    ctx.strokeStyle = rgba(colors.accent);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(64, 25, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    // 雷达支架
+    drawRect(ctx, 60, 30, 8, 22, colors.primary);
+    // 防空导弹
+    drawRect(ctx, 50, 40, 6, 16, [80, 80, 80]);
+    drawRect(ctx, 72, 40, 6, 16, [80, 80, 80]);
+    drawRect(ctx, 48, 36, 4, 8, COLORS.common.gun);
+    drawRect(ctx, 76, 36, 4, 8, COLORS.common.gun);
+  }
+  else if (type === 'sentry_gun') {
+    drawRect(ctx, 40, 55, 48, 45, colors.primary);
+    drawRect(ctx, 42, 57, 44, 41, colors.secondary);
+    // 小型炮塔
+    ctx.beginPath();
+    ctx.arc(64, 55, 14, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(colors.secondary);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 55, 10, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(colors.highlight);
+    ctx.fill();
+    // 机枪
+    drawRect(ctx, 70, 52, 20, 6, COLORS.common.gun);
+    drawRect(ctx, 88, 50, 6, 10, [20, 20, 20]);
+    // 弹药箱
+    drawRect(ctx, 44, 70, 12, 10, [100, 80, 50]);
+    drawRect(ctx, 72, 70, 12, 10, [100, 80, 50]);
+  }
+  else if (type === 'battle_bunker') {
+    drawRect(ctx, 20, 40, 88, 60, colors.primary);
+    drawRect(ctx, 22, 42, 84, 56, colors.secondary);
+    drawRect(ctx, 20, 40, 88, 10, colors.highlight);
+    // 地堡射击孔
+    drawRect(ctx, 28, 60, 16, 10, [30, 30, 30]);
+    drawRect(ctx, 56, 60, 16, 10, [30, 30, 30]);
+    drawRect(ctx, 84, 60, 16, 10, [30, 30, 30]);
+    // 沙袋
+    drawRect(ctx, 22, 90, 14, 10, [160, 140, 100]);
+    drawRect(ctx, 92, 90, 14, 10, [160, 140, 100]);
+    // 顶部观察口
+    drawRect(ctx, 55, 44, 18, 6, [30, 30, 30]);
+  }
+  else if (type === 'cloning_vats') {
+    drawRect(ctx, 15, 35, 98, 65, [80, 80, 80]);
+    drawRect(ctx, 17, 37, 94, 61, [60, 60, 60]);
+    drawRect(ctx, 15, 35, 98, 10, [100, 100, 100]);
+    // 克隆罐
+    for (let i = 0; i < 3; i++) {
+      const x = 28 + i * 26;
+      ctx.beginPath();
+      ctx.arc(x, 55, 10, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([0, 200, 100], 0.4);
+      ctx.fill();
+      ctx.strokeStyle = rgba([0, 200, 100], 0.7);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // 液体
+      drawRect(ctx, x - 6, 50, 12, 10, [0, 150, 80]);
+    }
+    // 管道
+    ctx.strokeStyle = rgba([120, 120, 120]);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(28, 65);
+    ctx.lineTo(80, 65);
+    ctx.stroke();
+    // 控制面板
+    drawRect(ctx, 45, 75, 38, 18, [40, 40, 40]);
+    drawRect(ctx, 47, 77, 34, 14, [0, 100, 60]);
+  }
+  else if (type === 'industrial_plant') {
+    drawRect(ctx, 8, 35, 112, 65, colors.primary);
+    drawRect(ctx, 10, 37, 108, 61, colors.secondary);
+    drawRect(ctx, 8, 35, 112, 12, colors.highlight);
+    // 工厂大门
+    drawRect(ctx, 30, 55, 68, 45, [100, 100, 100]);
+    drawRect(ctx, 32, 57, 64, 41, [130, 130, 130]);
+    // 齿轮装饰
+    ctx.strokeStyle = rgba(colors.accent);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(50, 50, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const angle = i * Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(50 + Math.cos(angle) * 10, 50 + Math.sin(angle) * 10);
+      ctx.lineTo(50 + Math.cos(angle) * 16, 50 + Math.sin(angle) * 16);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(78, 50, 10, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const angle = i * Math.PI / 3 + Math.PI / 6;
+      ctx.beginPath();
+      ctx.moveTo(78 + Math.cos(angle) * 8, 50 + Math.sin(angle) * 8);
+      ctx.lineTo(78 + Math.cos(angle) * 14, 50 + Math.sin(angle) * 14);
+      ctx.stroke();
+    }
+    // 烟囱
+    drawRect(ctx, 95, 15, 12, 24, [80, 80, 80]);
+    drawRect(ctx, 97, 17, 8, 20, [100, 100, 100]);
+  }
+  else if (type === 'psychic_sensor') {
+    drawRect(ctx, 15, 45, 98, 55, colors.primary);
+    drawRect(ctx, 17, 47, 94, 51, colors.secondary);
+    drawRect(ctx, 15, 45, 98, 8, colors.highlight);
+    // 心灵感应圆顶
+    ctx.beginPath();
+    ctx.arc(64, 45, 28, Math.PI, 0);
+    ctx.fillStyle = rgba([150, 50, 200], 0.6);
+    ctx.fill();
+    ctx.strokeStyle = rgba([180, 80, 230]);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // 内环
+    ctx.beginPath();
+    ctx.arc(64, 45, 18, Math.PI, 0);
+    ctx.strokeStyle = rgba([200, 100, 255], 0.5);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // 脉冲波
+    for (let i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(64, 45, 10 + i * 8, 0, Math.PI * 2);
+      ctx.strokeStyle = rgba([180, 80, 230], 0.2);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // 显示屏
+    drawRect(ctx, 45, 65, 38, 18, [30, 30, 30]);
+    drawRect(ctx, 47, 67, 34, 14, [80, 0, 120]);
+  }
+  else if (type === 'civilian_building') {
+    drawRect(ctx, 15, 30, 98, 70, [140, 130, 110]);
+    drawRect(ctx, 17, 32, 94, 66, [170, 160, 140]);
+    drawRect(ctx, 15, 30, 98, 10, [120, 110, 90]);
+    // 窗户
+    for (let y = 48; y < 85; y += 18) {
+      for (let x = 24; x < 100; x += 20) {
+        drawRect(ctx, x, y, 10, 10, [80, 120, 160]);
+      }
+    }
+    // 门
+    drawRect(ctx, 52, 75, 24, 25, [80, 60, 40]);
+    drawRect(ctx, 54, 77, 20, 23, [100, 80, 60]);
+  }
+  else if (type === 'biolab') {
+    drawRect(ctx, 15, 35, 98, 65, [80, 100, 80]);
+    drawRect(ctx, 17, 37, 94, 61, [100, 130, 100]);
+    drawRect(ctx, 15, 35, 98, 10, [60, 80, 60]);
+    // 实验室窗户
+    drawRect(ctx, 25, 50, 20, 14, [150, 220, 150]);
+    drawRect(ctx, 83, 50, 20, 14, [150, 220, 150]);
+    // 生物危险标志
+    ctx.fillStyle = rgba([255, 200, 0]);
+    ctx.beginPath();
+    ctx.arc(64, 60, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rgba([80, 100, 80]);
+    ctx.beginPath();
+    ctx.arc(64, 60, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // 通风管道
+    drawRect(ctx, 40, 20, 8, 18, [100, 100, 100]);
+    drawRect(ctx, 80, 20, 8, 18, [100, 100, 100]);
+    // 入口
+    drawRect(ctx, 50, 80, 28, 20, [60, 80, 60]);
+  }
+  else if (type === 'machine_shop') {
+    drawRect(ctx, 15, 40, 98, 60, [100, 90, 80]);
+    drawRect(ctx, 17, 42, 94, 56, [130, 120, 110]);
+    drawRect(ctx, 15, 40, 98, 8, [80, 70, 60]);
+    // 修理平台
+    drawRect(ctx, 25, 75, 78, 20, [100, 100, 100]);
+    drawRect(ctx, 27, 77, 74, 16, [130, 130, 130]);
+    // 扳手图标
+    ctx.strokeStyle = rgba([255, 200, 50]);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(55, 50);
+    ctx.lineTo(73, 68);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(53, 48, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    // 齿轮
+    ctx.strokeStyle = rgba([180, 180, 180]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(80, 55, 8, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      const angle = i * Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(80 + Math.cos(angle) * 6, 55 + Math.sin(angle) * 6);
+      ctx.lineTo(80 + Math.cos(angle) * 11, 55 + Math.sin(angle) * 11);
+      ctx.stroke();
+    }
+  }
+  else if (type === 'bridge') {
+    // 桥面
+    drawRect(ctx, 4, 45, 120, 20, [120, 110, 100]);
+    drawRect(ctx, 6, 47, 116, 16, [150, 140, 130]);
+    // 桥栏杆
+    drawRect(ctx, 4, 40, 120, 6, [100, 90, 80]);
+    drawRect(ctx, 4, 64, 120, 4, [100, 90, 80]);
+    // 桥墩
+    drawRect(ctx, 20, 64, 12, 30, [90, 80, 70]);
+    drawRect(ctx, 96, 64, 12, 30, [90, 80, 70]);
+    drawRect(ctx, 56, 64, 16, 30, [90, 80, 70]);
+    // 水面
+    ctx.strokeStyle = rgba([100, 150, 255], 0.4);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(4, 94);
+    ctx.lineTo(124, 94);
+    ctx.stroke();
+  }
+  else if (type === 'bridge_destroyed') {
+    // 残余桥面左
+    drawRect(ctx, 4, 45, 50, 20, [120, 110, 100]);
+    drawRect(ctx, 6, 47, 46, 16, [150, 140, 130]);
+    // 残余桥面右
+    drawRect(ctx, 74, 45, 50, 20, [120, 110, 100]);
+    drawRect(ctx, 76, 47, 46, 16, [150, 140, 130]);
+    // 断裂边缘
+    drawRect(ctx, 50, 48, 26, 16, [80, 70, 60]);
+    // 碎片
+    drawRect(ctx, 52, 60, 8, 8, [100, 90, 80]);
+    drawRect(ctx, 66, 58, 6, 6, [90, 80, 70]);
+    // 残余桥墩
+    drawRect(ctx, 20, 64, 12, 20, [90, 80, 70]);
+    drawRect(ctx, 96, 64, 12, 20, [90, 80, 70]);
+    // 断裂桥墩
+    drawRect(ctx, 58, 70, 12, 10, [70, 60, 50]);
+    // 水面
+    ctx.strokeStyle = rgba([100, 150, 255], 0.4);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(4, 90);
+    ctx.lineTo(124, 90);
+    ctx.stroke();
+  }
 
   return canvas;
 }
@@ -1416,6 +2172,24 @@ async function main() {
   saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_submarine.png'));
   saveCanvas(generateMiner('allied'), path.join(outDir, 'units/allied_transport_ship.png'));
 
+  // 新增单位
+  saveCanvas(generateAttackDog(), path.join(outDir, 'units/soviet_attack_dog.png'));
+  saveCanvas(generateMiner('soviet'), path.join(outDir, 'units/soviet_war_miner.png'));
+  saveCanvas(generateMirage(), path.join(outDir, 'units/allied_mirage.png'));
+  saveCanvas(generateGrizzly(), path.join(outDir, 'units/allied_grizzly.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_lash.png'));
+  saveCanvas(generateDreadnought(), path.join(outDir, 'units/soviet_dreadnought.png'));
+  saveCanvas(generateAegis(), path.join(outDir, 'units/allied_aegis.png'));
+  saveCanvas(generateSoldier('allied'), path.join(outDir, 'units/allied_gi.png'));
+  saveCanvas(generateGuardianGI(), path.join(outDir, 'units/allied_guardian_gi.png'));
+  saveCanvas(generateBrute(), path.join(outDir, 'units/soviet_brute.png'));
+  saveCanvas(generateHelicopter('soviet'), path.join(outDir, 'units/soviet_disc.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_boomer.png'));
+  saveCanvas(generateTank('soviet'), path.join(outDir, 'units/soviet_gattling_tank.png'));
+  saveCanvas(generateMiner('soviet'), path.join(outDir, 'units/soviet_slave_miner.png'));
+  saveCanvas(generateMCV('allied'), path.join(outDir, 'units/allied_mcv.png'));
+  saveCanvas(generateMCV('soviet'), path.join(outDir, 'units/soviet_mcv.png'));
+
   console.log('🏛️  生成建筑精灵图...');
   
   // 基础建筑
@@ -1458,9 +2232,22 @@ async function main() {
   saveCanvas(generateBuilding('oil_derrick', 'allied'), path.join(outDir, 'buildings/neutral_oil_derrick.png'));
   saveCanvas(generateBuilding('hospital', 'allied'), path.join(outDir, 'buildings/neutral_hospital.png'));
 
+  // 新增建筑
+  saveCanvas(generateBuilding('patriot', 'allied'), path.join(outDir, 'buildings/allied_patriot.png'));
+  saveCanvas(generateBuilding('sentry_gun', 'soviet'), path.join(outDir, 'buildings/soviet_sentry_gun.png'));
+  saveCanvas(generateBuilding('battle_bunker', 'soviet'), path.join(outDir, 'buildings/soviet_battle_bunker.png'));
+  saveCanvas(generateBuilding('cloning_vats', 'soviet'), path.join(outDir, 'buildings/soviet_cloning_vats.png'));
+  saveCanvas(generateBuilding('industrial_plant', 'soviet'), path.join(outDir, 'buildings/soviet_industrial_plant.png'));
+  saveCanvas(generateBuilding('psychic_sensor', 'soviet'), path.join(outDir, 'buildings/soviet_psychic_sensor.png'));
+  saveCanvas(generateBuilding('civilian_building', 'allied'), path.join(outDir, 'buildings/neutral_civilian_building.png'));
+  saveCanvas(generateBuilding('biolab', 'allied'), path.join(outDir, 'buildings/neutral_biolab.png'));
+  saveCanvas(generateBuilding('machine_shop', 'allied'), path.join(outDir, 'buildings/neutral_machine_shop.png'));
+  saveCanvas(generateBuilding('bridge', 'allied'), path.join(outDir, 'buildings/neutral_bridge.png'));
+  saveCanvas(generateBuilding('bridge_destroyed', 'allied'), path.join(outDir, 'buildings/neutral_bridge_destroyed.png'));
+
   console.log('\n✅ 完整精灵图集生成完成！');
   console.log('📍 文件位置: public/assets/sprites/');
-  console.log('📊 单位: 16种 | 建筑: 41种 | 特效: ' + (FRAMES * 3) + '帧');
+  console.log('📊 单位: 32种 | 建筑: 52种 | 特效: ' + (FRAMES * 3) + '帧');
   console.log('🎮 请运行 npm run dev 查看效果');
 }
 

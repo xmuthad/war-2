@@ -47,10 +47,15 @@ import { captureSystem } from '../game/systems/CaptureSystem';
 import { garrisonSystem } from '../game/systems/GarrisonSystem';
 import { bridgeSystem } from '../game/systems/BridgeSystem';
 import { deploySystem } from '../game/systems/DeploySystem';
+import { ChronoShiftSystem } from '../game/systems/ChronoShiftSystem';
 import { terrainHeightSystem } from '../game/systems/TerrainHeightSystem';
 import { AI_CONFIG } from '../game/config/AIConfig';
 import { CombatUpdateSystem } from '../game/systems/CombatUpdateSystem';
-import { combatSystem, DamageType, ArmorType } from '../game/systems/CombatSystem';
+import { AircraftAmmoSystem } from '../game/systems/AircraftAmmoSystem';
+import { combatSystem, DamageType, ArmorType, INFANTRY_UNIT_TYPES } from '../game/systems/CombatSystem';
+import { SpyInfiltrationSystem } from '../game/systems/SpyInfiltrationSystem';
+import { ivanBombSystem } from '../game/systems/IvanBombSystem';
+import { radiationSystem } from '../game/systems/RadiationSystem';
 import { GAME_CONFIG } from '../game/config/GameConfig';
 import { UPGRADES } from '../game/data/upgrades';
 import { ACHIEVEMENTS, loadUnlockedAchievements, saveUnlockedAchievements, Achievement } from '../game/data/achievements';
@@ -92,9 +97,12 @@ const harvestSystem = new HarvestSystem();
 const victoryConditionSystem = new VictoryConditionSystem();
 const repairSystem = new RepairSystem();
 const combatUpdateSystem = new CombatUpdateSystem();
+const aircraftAmmoSystem = new AircraftAmmoSystem();
 const autoEngageSys = new AutoEngageSystem();
 const autoHarvestSys = new AutoHarvestSystem();
 const attackWaveSys = new AttackWaveSystem();
+const spyInfiltrationSystem = new SpyInfiltrationSystem();
+const chronoShiftSystem = new ChronoShiftSystem();
 
 type LogLevel = 'info' | 'warn' | 'error';
 
@@ -223,6 +231,7 @@ interface GameStore {
   activateIronCurtain: (buildingId: string, targetPosition: Vector2) => void;
   activateChronosphere: (buildingId: string, sourcePosition: Vector2, targetPosition: Vector2) => void;
   useFactionAbility: (position: { x: number; y: number }, targetId?: string) => void;
+  setSpyInfiltrateTarget: (spyId: string, buildingId: string) => void;
   // Campaign state
   selectedCampaign: CampaignId | null;
   selectedMission: CampaignMission | null;
@@ -643,51 +652,6 @@ function applyUpgradeEffects(player: Player, upgradeType: UpgradeType): void {
   }
 }
 
-// Spy infiltration: apply effect based on infiltrated building type
-function applySpyInfiltration(spy: Unit, building: Building, targetPlayer: Player, spyOwner: Player): void {
-  const gameTime = useGameStore.getState().gameTime;
-  switch (building.type) {
-    case 'power':
-      // Power plant: cut power for 30 seconds
-      building.empDisabledUntil = gameTime + 30;
-      gameEventBus.emit('ui:notification', { message: '间谍切断了敌方电力！', type: 'success' });
-      break;
-    case 'refinery':
-      // Refinery: steal 30% of target's money
-      const stolenAmount = Math.floor(targetPlayer.money * 0.3);
-      if (stolenAmount > 0) {
-        targetPlayer.money -= stolenAmount;
-        spyOwner.money += stolenAmount;
-      }
-      gameEventBus.emit('ui:notification', { message: `间谍窃取了 $${stolenAmount}！`, type: 'success' });
-      break;
-    case 'barracks':
-    case 'warfactory':
-    case 'helipad':
-    case 'airfield':
-    case 'naval_shipyard':
-      // Production building: disable for 30 seconds
-      building.empDisabledUntil = gameTime + 30;
-      gameEventBus.emit('ui:notification', { message: '间谍瘫痪了敌方生产设施！', type: 'success' });
-      break;
-    case 'radar':
-    case 'command':
-      // Radar/Command: reveal all enemy units for 30 seconds (grant spy satellite temporarily)
-      if (!spyOwner.researchedUpgrades.includes(UpgradeType.SPY_SATELLITE)) {
-        spyOwner.researchedUpgrades.push(UpgradeType.SPY_SATELLITE);
-        // Use gameTime-based expiry instead of setTimeout
-        spyOwner._tempSpySatelliteUntil = gameTime + 30;
-      }
-      gameEventBus.emit('ui:notification', { message: '间谍获取了敌方情报！', type: 'success' });
-      break;
-    default:
-      // Generic building: disable for 15 seconds
-      building.empDisabledUntil = gameTime + 15;
-      gameEventBus.emit('ui:notification', { message: '间谍渗透了敌方建筑！', type: 'success' });
-      break;
-  }
-}
-
 // Apply faction ability effect to game state
 function applyAbilityEffect(effect: AbilityEffect, player: Player, position: { x: number; y: number }): void {
   const allPlayers = [player, ...useGameStore.getState().aiPlayers];
@@ -1055,7 +1019,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       aiControllers.set(slot.id, controller);
     }
 
-    // Place neutral buildings (oil derricks + hospital)
+    // Place neutral buildings (oil derricks + hospital + civilian buildings + bridges)
     const mapCenterX = Math.floor(map.width / 2) * GAME_CONFIG.TILE_SIZE;
     const mapCenterY = Math.floor(map.height / 2) * GAME_CONFIG.TILE_SIZE;
     const neutralBuildings: Building[] = [
@@ -1071,7 +1035,49 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         x: mapCenterX,
         y: mapCenterY
       }),
+      // Civilian buildings for garrison
+      createBuildingFromData(BuildingType.CIVILIAN_BUILDING, Faction.NEUTRAL, {
+        x: mapCenterX - GAME_CONFIG.TILE_SIZE * 8,
+        y: mapCenterY - GAME_CONFIG.TILE_SIZE * 4
+      }),
+      createBuildingFromData(BuildingType.CIVILIAN_BUILDING, Faction.NEUTRAL, {
+        x: mapCenterX + GAME_CONFIG.TILE_SIZE * 6,
+        y: mapCenterY - GAME_CONFIG.TILE_SIZE * 6
+      }),
+      createBuildingFromData(BuildingType.CIVILIAN_BUILDING, Faction.NEUTRAL, {
+        x: mapCenterX - GAME_CONFIG.TILE_SIZE * 2,
+        y: mapCenterY + GAME_CONFIG.TILE_SIZE * 6
+      }),
+      // Tech buildings
+      createBuildingFromData(BuildingType.BIOLAB, Faction.NEUTRAL, {
+        x: mapCenterX + GAME_CONFIG.TILE_SIZE * 2,
+        y: mapCenterY - GAME_CONFIG.TILE_SIZE * 8
+      }),
+      createBuildingFromData(BuildingType.MACHINE_SHOP, Faction.NEUTRAL, {
+        x: mapCenterX - GAME_CONFIG.TILE_SIZE * 6,
+        y: mapCenterY + GAME_CONFIG.TILE_SIZE * 4
+      }),
     ];
+
+    // Add bridge buildings at BRIDGE tile positions
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        if (map.tiles[y][x].type === TileType.BRIDGE) {
+          // Check if we already placed a bridge building near this position
+          const bridgePos = { x: x * GAME_CONFIG.TILE_SIZE, y: y * GAME_CONFIG.TILE_SIZE };
+          const alreadyPlaced = neutralBuildings.some(b =>
+            b.isBridge && Math.abs(b.position.x - bridgePos.x) < GAME_CONFIG.TILE_SIZE * 3 &&
+            Math.abs(b.position.y - bridgePos.y) < GAME_CONFIG.TILE_SIZE * 3
+          );
+          if (!alreadyPlaced) {
+            const bridgeBuilding = createBuildingFromData(BuildingType.BRIDGE, Faction.NEUTRAL, bridgePos);
+            bridgeBuilding.isBridge = true;
+            bridgeBuilding.isBridgeDestroyed = false;
+            neutralBuildings.push(bridgeBuilding);
+          }
+        }
+      }
+    }
 
     // Apply superweapons setting: remove superweapon buildings if disabled
     if (!settings.superweaponsEnabled) {
@@ -1529,12 +1535,17 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
   destroyBuilding: (buildingId) => {
     let wasWall = false;
+    let nuclearExplosion: { position: Vector2; faction: Faction; teamId: number | undefined } | null = null;
     set((state) => {
       const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
       for (const player of allPlayers) {
         const building = player.buildings.find(b => b.id === buildingId);
         if (building) {
           if (building.type === BuildingType.WALL) wasWall = true;
+          // Nuclear Reactor: explode on death
+          if (building.type === BuildingType.NUCLEAR_REACTOR && building.isConstructed) {
+            nuclearExplosion = { position: { ...building.position }, faction: building.faction, teamId: player.teamId };
+          }
           const tilePos = mapManager.worldToTile(building.position.x, building.position.y);
           mapManager.unmarkOccupied(tilePos.x, tilePos.y, building.width, building.height);
           gameEventBus.emit('building:destroyed', { buildingId, type: building.type, faction: building.faction, position: building.position });
@@ -1546,6 +1557,72 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     });
     if (wasWall) {
       gameEventBus.emit('pathfinding:obstaclesChanged');
+    }
+    // Nuclear Reactor explosion: damage nearby units and buildings, leave radiation
+    if (nuclearExplosion) {
+      const pos = nuclearExplosion.position;
+      const unitRadius = 5 * GAME_CONFIG.TILE_SIZE;
+      const buildingRadius = 3 * GAME_CONFIG.TILE_SIZE;
+      const unitDamage = 500;
+      const buildingDamage = 800;
+      const destroyedUnitIds: string[] = [];
+      const destroyedBuildingIds: string[] = [];
+
+      set((state) => {
+        const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
+        for (const player of allPlayers) {
+          // Damage units within 5 tile radius
+          for (const unit of [...player.units]) {
+            const dx = unit.position.x - pos.x;
+            const dy = unit.position.y - pos.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= unitRadius) {
+              unit.health -= unitDamage;
+              gameEventBus.emit('combat:hit', { attackerId: '', targetId: unit.id, damage: unitDamage, position: unit.position });
+              if (unit.health <= 0) {
+                destroyedUnitIds.push(unit.id);
+                gameEventBus.emit('combat:explosion', { position: unit.position, unitType: unit.type });
+              }
+            }
+          }
+          // Damage buildings within 3 tile radius
+          for (const building of [...player.buildings]) {
+            const dx = building.position.x - pos.x;
+            const dy = building.position.y - pos.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= buildingRadius) {
+              building.health -= buildingDamage;
+              gameEventBus.emit('combat:hit', { attackerId: '', targetId: building.id, damage: buildingDamage, position: building.position });
+              if (building.health <= 0) {
+                destroyedBuildingIds.push(building.id);
+                const tilePos = mapManager.worldToTile(building.position.x, building.position.y);
+                for (let dy2 = 0; dy2 < building.height; dy2++) {
+                  for (let dx2 = 0; dx2 < building.width; dx2++) {
+                    mapManager.setTile(tilePos.x + dx2, tilePos.y + dy2, TileType.RUBBLE);
+                  }
+                }
+                gameEventBus.emit('combat:explosion', { position: building.position, buildingType: building.type });
+              }
+            }
+          }
+        }
+      });
+
+      // Leave radiation zone at reactor position
+      radiationSystem.createRadiationZone(
+        pos,
+        5 * GAME_CONFIG.TILE_SIZE,
+        40,
+        60,
+        nuclearExplosion.faction
+      );
+
+      gameEventBus.emit('nuclear:explosion', { position: pos, faction: nuclearExplosion.faction });
+
+      for (const id of destroyedUnitIds) {
+        get().destroyUnit(id);
+      }
+      for (const id of destroyedBuildingIds) {
+        get().destroyBuilding(id);
+      }
     }
   },
 
@@ -1621,6 +1698,32 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             }
           }
         }
+
+        // Biolab: auto-heal nearby infantry (captured neutral building)
+        const biolabs = player.buildings.filter(b => b.type === BuildingType.BIOLAB && b.isConstructed);
+        for (const biolab of biolabs) {
+          for (const unit of player.units) {
+            if (!INFANTRY_TYPES.has(unit.type)) continue;
+            const dx = unit.position.x - biolab.position.x;
+            const dy = unit.position.y - biolab.position.y;
+            if (Math.sqrt(dx * dx + dy * dy) < GAME_CONFIG.TILE_SIZE * 8 && unit.health < unit.maxHealth) {
+              unit.health = Math.min(unit.maxHealth, unit.health + unit.maxHealth * 0.01 * deltaTime);
+            }
+          }
+        }
+
+        // Machine Shop: auto-repair nearby vehicles (captured neutral building)
+        const machineShops = player.buildings.filter(b => b.type === BuildingType.MACHINE_SHOP && b.isConstructed);
+        for (const shop of machineShops) {
+          for (const unit of player.units) {
+            if (INFANTRY_TYPES.has(unit.type) || unit.isAirborne || unit.isNaval) continue;
+            const dx = unit.position.x - shop.position.x;
+            const dy = unit.position.y - shop.position.y;
+            if (Math.sqrt(dx * dx + dy * dy) < GAME_CONFIG.TILE_SIZE * 8 && unit.health < unit.maxHealth) {
+              unit.health = Math.min(unit.maxHealth, unit.health + unit.maxHealth * 0.008 * deltaTime);
+            }
+          }
+        }
       }
 
       // Update pathfinding dynamic obstacles from all units
@@ -1641,41 +1744,19 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       for (const player of allPlayers) {
         powerSystem.update(player);
 
-        productionSystem.update(player, deltaTime, (type, faction, pos) =>
-          createUnitFromData(type, faction, pos, player.researchedUpgrades)
-        );
+        productionSystem.update(player, deltaTime, (type, faction, pos) => {
+          const newUnit = createUnitFromData(type, faction, pos, player.researchedUpgrades);
+          spyInfiltrationSystem.applyVeteranBuff(newUnit, player);
+          return newUnit;
+        });
 
         // Aircraft rearm: check returning aircraft near helipad/airfield
-        combatUpdateSystem.updateAircraftRearm(player);
+        aircraftAmmoSystem.update(deltaTime, player.units, player.buildings, state);
+
+        // Chrono Legionnaire: process teleport charging and cooldown
+        chronoShiftSystem.update(deltaTime, player.units, state.gameTime);
 
         for (const unit of player.units) {
-          // Process chrono shift charging
-          if (unit.type === UnitType.CHRONO && unit.isChronoShifting) {
-            unit.chronoShiftTimer -= deltaTime;
-            if (unit.chronoShiftTimer <= 0) {
-              // Teleport! Validate target position is walkable
-              const target = unit.chronoShiftTarget;
-              if (target && mapManager.isWalkableAtPosition(target.x, target.y)) {
-                unit.position = { ...target };
-              }
-              unit.chronoShiftTarget = undefined;
-              unit.isChronoShifting = false;
-              unit.isChronoCooldown = true;
-              unit.chronoShiftTimer = player.researchedUpgrades.includes(UpgradeType.CHRONO_TECH) ? 2.1 : 3.0; // CHRONO_TECH reduces cooldown by 30%
-              unit.state = UnitState.IDLE;
-              gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position }, faction: player.faction });
-            }
-          }
-
-          // Process chrono cooldown
-          if (unit.type === UnitType.CHRONO && unit.isChronoCooldown) {
-            unit.chronoShiftTimer -= deltaTime;
-            if (unit.chronoShiftTimer <= 0) {
-              unit.isChronoCooldown = false;
-              unit.chronoShiftTimer = 0;
-            }
-          }
-
           // Skip normal movement for chrono-shifting units (cooldown is ok - they can attack/move normally)
           if (!(unit.type === UnitType.CHRONO && unit.isChronoShifting)) {
             movementSystem.updateWithAvoidance(unit, player.units, deltaTime);
@@ -1727,11 +1808,6 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
           repairSystem.update(unit, player, deltaTime);
 
-          // Elite units slowly self-heal
-          if (unit.rank === UnitRank.ELITE && unit.health < unit.maxHealth) {
-            unit.health = Math.min(unit.maxHealth, unit.health + unit.maxHealth * GAME_CONFIG.ELITE_HEAL_RATE * deltaTime);
-          }
-
           // Iron Curtain invulnerability expiry
           if (unit.isInvulnerable && unit.invulnerableUntil && state.gameTime >= unit.invulnerableUntil) {
             unit.isInvulnerable = false;
@@ -1745,6 +1821,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           }
           if (unit._debuffUntil && state.gameTime >= unit._debuffUntil) {
             unit._debuffUntil = undefined;
+          }
+          // Clear expired spy reveal
+          if (unit._spyRevealedUntil && state.gameTime >= unit._spyRevealedUntil) {
+            unit._spyRevealedUntil = undefined;
           }
           // Recalculate attack based on active buff/debuff
           if (!unit._buffUntil && !unit._debuffUntil) {
@@ -1781,29 +1861,6 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             } else if (unit.state === UnitState.ATTACKING) {
               unit.isDisguised = false;
             }
-
-            // Spy infiltration: when spy reaches an enemy building, trigger infiltration effect
-            if (unit.isDisguised && (unit.state === UnitState.IDLE || unit.state === UnitState.MOVING)) {
-              const SPY_INFILTRATE_RANGE = GAME_CONFIG.TILE_SIZE * 2;
-              for (const otherPlayer of allPlayers) {
-                if (otherPlayer.id === player.id) continue;
-                if (player.teamId !== undefined && otherPlayer.teamId === player.teamId) continue;
-                for (const building of otherPlayer.buildings) {
-                  if (!building.isConstructed) continue;
-                  const bCenterX = building.position.x + (building.width || 2) * GAME_CONFIG.TILE_SIZE / 2;
-                  const bCenterY = building.position.y + (building.height || 2) * GAME_CONFIG.TILE_SIZE / 2;
-                  const dist = Math.sqrt((unit.position.x - bCenterX) ** 2 + (unit.position.y - bCenterY) ** 2);
-                  if (dist < SPY_INFILTRATE_RANGE) {
-                    // Infiltrate! Apply effect based on building type
-                    applySpyInfiltration(unit, building, otherPlayer, player);
-                    // Spy is consumed after infiltration
-                    destroyedUnits.push(unit.id);
-                    break;
-                  }
-                }
-                if (destroyedUnits.includes(unit.id)) break;
-              }
-            }
           }
         }
 
@@ -1831,6 +1888,9 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           get().captureBuilding(event.engineerId, event.buildingId);
         });
 
+        // Spy infiltration: check for SPY units near enemy buildings
+        spyInfiltrationSystem.update(allPlayers, destroyedUnits, state);
+
         // Garrison system: process infantry entering/exiting buildings
         garrisonSystem.update(player, allPlayers, state.neutralBuildings, deltaTime,
           (event) => { gameEventBus.emit('transport:load', event as unknown as Record<string, unknown>); },
@@ -1839,9 +1899,40 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
         // Deploy system: process MCV/slave miner deployment
         deploySystem.update(player, allPlayers, deltaTime, (deployData) => {
-          const { unitId, buildingType, position, faction } = deployData as { unitId: string; buildingType: BuildingType; position: Vector2; faction: Faction };
-          get().buildStructureForPlayer(player.id, buildingType, position);
+          const data = deployData as unknown as { unitId: string; buildingType: BuildingType; position: Vector2; faction: Faction };
+          if (data.buildingType && data.position) {
+            get().buildStructureForPlayer(player.id, data.buildingType, data.position);
+          }
         });
+
+        // Psychic Sensor: reveal enemy units near the sensor
+        const psychicSensors = player.buildings.filter(
+          b => b.type === BuildingType.PSYCHIC_SENSOR && b.isConstructed && b.isPowered
+        );
+        for (const sensor of psychicSensors) {
+          const sensorRange = 10 * GAME_CONFIG.TILE_SIZE; // 10 tiles detection range
+          const sensorCenter = {
+            x: sensor.position.x + (sensor.data.width || 2) * GAME_CONFIG.TILE_SIZE / 2,
+            y: sensor.position.y + (sensor.data.height || 2) * GAME_CONFIG.TILE_SIZE / 2,
+          };
+          for (const enemyPlayer of allPlayers) {
+            if (enemyPlayer.id === player.id) continue;
+            if (player.teamId !== undefined && enemyPlayer.teamId === player.teamId) continue;
+            for (const enemyUnit of enemyPlayer.units) {
+              if (enemyUnit.garrisonedBuildingId) continue;
+              const dx = enemyUnit.position.x - sensorCenter.x;
+              const dy = enemyUnit.position.y - sensorCenter.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist <= sensorRange) {
+                // Mark unit as detected by psychic sensor (extend vision temporarily)
+                // This is handled by setting a detected flag that the rendering system can use
+                enemyUnit._psychicDetectedUntil = (enemyUnit._psychicDetectedUntil ?? 0) > state.gameTime
+                  ? enemyUnit._psychicDetectedUntil
+                  : state.gameTime + 2; // visible for 2 seconds after leaving range
+              }
+            }
+          }
+        }
 
         // Building construction progress
         for (const building of player.buildings) {
@@ -1855,6 +1946,11 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             const idx = player.researchedUpgrades.indexOf(UpgradeType.SPY_SATELLITE);
             if (idx >= 0) player.researchedUpgrades.splice(idx, 1);
             player._tempSpySatelliteUntil = undefined;
+          }
+
+          // Clear expired spy map reveal buff
+          if (player.spyInfiltrationBuffs && player.spyInfiltrationBuffs.mapRevealedUntil > 0 && player.spyInfiltrationBuffs.mapRevealedUntil <= state.gameTime) {
+            player.spyInfiltrationBuffs.mapRevealedUntil = 0;
           }
 
           // Building repair is handled by ProductionSystem (avoid duplicate processing)
@@ -1911,70 +2007,18 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       }
 
       // Ivan bomb timer update
-      const detonatedBombs = combatSystem.updateBombs(deltaTime);
-      for (const bomb of detonatedBombs) {
-        let bombKillCount = 0;
-        const bombOwner = allPlayers.find(p => p.faction === bomb.faction);
-        // Find and damage the target
-        for (const player of allPlayers) {
-          const targetUnit = player.units.find(u => u.id === bomb.targetId);
-          if (targetUnit) {
-            const armorType = combatSystem.getArmorTypeForUnit(targetUnit.type);
-            const actualDamage = combatSystem.calculateDamage(bomb.damage, DamageType.EXPLOSIVE, armorType, targetUnit.armor);
-            targetUnit.health -= actualDamage;
-            gameEventBus.emit('combat:hit', { attackerId: bomb.id, targetId: targetUnit.id, damage: actualDamage, position: targetUnit.position });
-            if (targetUnit.health <= 0) {
-              destroyedUnits.push(targetUnit.id);
-              bombKillCount++;
-            }
-          }
-          const targetBuilding = player.buildings.find(b => b.id === bomb.targetId);
-          if (targetBuilding) {
-            const actualDamage = combatSystem.calculateDamage(bomb.damage, DamageType.EXPLOSIVE, ArmorType.STRUCTURE, 0);
-            targetBuilding.health -= actualDamage;
-            gameEventBus.emit('combat:hit', { attackerId: bomb.id, targetId: targetBuilding.id, damage: actualDamage, position: targetBuilding.position });
-            if (targetBuilding.health <= 0) {
-              destroyedBuildings.push(targetBuilding.id);
-              bombKillCount++;
-            }
-          }
+      const bombResult = ivanBombSystem.update(deltaTime, allPlayers);
+      for (const unitId of bombResult.destroyedUnits) {
+        destroyedUnits.push(unitId);
+      }
+      for (const buildingId of bombResult.destroyedBuildings) {
+        destroyedBuildings.push(buildingId);
+      }
 
-          // Also deal AoE damage to nearby entities (1.5 tile radius)
-          const aoeRadius = 1.5 * GAME_CONFIG.TILE_SIZE;
-          for (const unit of [...player.units]) {
-            if (unit.id === bomb.targetId) continue;
-            const dx = unit.position.x - bomb.targetPosition.x;
-            const dy = unit.position.y - bomb.targetPosition.y;
-            if (Math.sqrt(dx * dx + dy * dy) <= aoeRadius) {
-              const armorType = combatSystem.getArmorTypeForUnit(unit.type);
-              const aoeDamage = combatSystem.calculateDamage(bomb.damage * 0.5, DamageType.EXPLOSIVE, armorType, unit.armor);
-              unit.health -= aoeDamage;
-              gameEventBus.emit('combat:hit', { attackerId: bomb.id, targetId: unit.id, damage: aoeDamage, position: unit.position });
-              if (unit.health <= 0) {
-                destroyedUnits.push(unit.id);
-                bombKillCount++;
-              }
-            }
-          }
-          for (const building of [...player.buildings]) {
-            if (building.id === bomb.targetId) continue;
-            const dx = building.position.x - bomb.targetPosition.x;
-            const dy = building.position.y - bomb.targetPosition.y;
-            if (Math.sqrt(dx * dx + dy * dy) <= aoeRadius) {
-              const aoeDamage = combatSystem.calculateDamage(bomb.damage * 0.5, DamageType.EXPLOSIVE, ArmorType.STRUCTURE, 0);
-              building.health -= aoeDamage;
-              gameEventBus.emit('combat:hit', { attackerId: bomb.id, targetId: building.id, damage: aoeDamage, position: building.position });
-              if (building.health <= 0) {
-                destroyedBuildings.push(building.id);
-                bombKillCount++;
-              }
-            }
-          }
-        }
-        if (bombOwner && bombKillCount > 0) {
-          bombOwner.statistics.enemiesDestroyed += bombKillCount;
-        }
-        gameEventBus.emit('combat:explosion', { position: bomb.targetPosition });
+      // Radiation system update
+      const radiationResult = radiationSystem.update(deltaTime, allPlayers);
+      for (const unitId of radiationResult.destroyedUnits) {
+        destroyedUnits.push(unitId);
       }
 
       if (state.currentPlayer) {
@@ -2313,7 +2357,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         combinedEnemyPlayer,
         state.map,
         state.gameTime,
-        aiPlayer.difficulty
+        aiPlayer.difficulty,
+        state.neutralBuildings
       );
 
       const actions = controller.update(context);
@@ -2516,7 +2561,19 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         // Check queue limit (max 5 items)
         if (building.productionQueue.length >= 5) return;
 
-        player.money -= unitData.cost;
+        // Industrial Plant: 25% cost reduction for vehicles
+        let finalCost = unitData.cost;
+        const isVehicle = !INFANTRY_TYPES.has(unitType) && unitType !== UnitType.MINER && !unitData.isNaval;
+        if (isVehicle) {
+          const hasIndustrialPlant = player.buildings.some(
+            b => b.type === BuildingType.INDUSTRIAL_PLANT && b.isConstructed && b.isPowered
+          );
+          if (hasIndustrialPlant) {
+            finalCost = Math.floor(unitData.cost * 0.75);
+          }
+        }
+        if (player.money < finalCost) return;
+        player.money -= finalCost;
 
         // Add to production queue
         const queueItem = {
@@ -2525,7 +2582,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           type: unitType,
           progress: 0,
           totalTime: unitData.buildTime,
-          cost: unitData.cost,
+          cost: finalCost,
         };
         building.productionQueue.push(queueItem);
 
@@ -3354,14 +3411,26 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         const curtainRadius = 5 * GAME_CONFIG.TILE_SIZE;
         const invulnerableDuration = 20000; // 20 seconds in ms
 
-        // Make all friendly units in radius invulnerable
+        // Make all friendly units in radius invulnerable (infantry are instantly killed instead)
+        const killedInfantryIds: string[] = [];
         for (const unit of player.units) {
           const dx = unit.position.x - targetPosition.x;
           const dy = unit.position.y - targetPosition.y;
           if (Math.sqrt(dx * dx + dy * dy) <= curtainRadius) {
-            unit.isInvulnerable = true;
-            unit.invulnerableUntil = get().gameTime + invulnerableDuration / 1000;
+            // Infantry are instantly killed by Iron Curtain
+            if (INFANTRY_UNIT_TYPES.has(unit.type)) {
+              unit.health = 0;
+              killedInfantryIds.push(unit.id);
+            } else {
+              unit.isInvulnerable = true;
+              unit.invulnerableUntil = get().gameTime + invulnerableDuration / 1000;
+            }
           }
+        }
+
+        // Destroy killed infantry units
+        for (const unitId of killedInfantryIds) {
+          get().destroyUnit(unitId);
         }
 
         gameEventBus.emit('superweapon:activated', { type: BuildingType.IRON_CURTAIN, position: targetPosition, faction: player.faction });
@@ -3386,25 +3455,37 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
         const chronoRadius = 5 * GAME_CONFIG.TILE_SIZE;
 
-        // Teleport all friendly units from source area to target area
+        // Teleport all friendly units from source area to target area (infantry are instantly killed)
+        const teleportedInfantryIds: string[] = [];
         for (const unit of player.units) {
           const dx = unit.position.x - sourcePosition.x;
           const dy = unit.position.y - sourcePosition.y;
           if (Math.sqrt(dx * dx + dy * dy) <= chronoRadius) {
-            // Offset from source center to maintain formation
-            const offsetX = unit.position.x - sourcePosition.x;
-            const offsetY = unit.position.y - sourcePosition.y;
-            // Clamp to map boundaries
-            const mapWidth = state.map ? state.map.width * GAME_CONFIG.TILE_SIZE : Infinity;
-            const mapHeight = state.map ? state.map.height * GAME_CONFIG.TILE_SIZE : Infinity;
-            const newX = Math.max(0, Math.min(mapWidth - GAME_CONFIG.TILE_SIZE, targetPosition.x + offsetX));
-            const newY = Math.max(0, Math.min(mapHeight - GAME_CONFIG.TILE_SIZE, targetPosition.y + offsetY));
-            unit.position = { x: newX, y: newY };
-            unit.state = UnitState.IDLE;
-            unit.target = null;
-            unit.waypoints = [];
-            gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position }, faction: player.faction });
+            // Infantry are instantly killed by Chronosphere
+            if (INFANTRY_UNIT_TYPES.has(unit.type)) {
+              unit.health = 0;
+              teleportedInfantryIds.push(unit.id);
+            } else {
+              // Offset from source center to maintain formation
+              const offsetX = unit.position.x - sourcePosition.x;
+              const offsetY = unit.position.y - sourcePosition.y;
+              // Clamp to map boundaries
+              const mapWidth = state.map ? state.map.width * GAME_CONFIG.TILE_SIZE : Infinity;
+              const mapHeight = state.map ? state.map.height * GAME_CONFIG.TILE_SIZE : Infinity;
+              const newX = Math.max(0, Math.min(mapWidth - GAME_CONFIG.TILE_SIZE, targetPosition.x + offsetX));
+              const newY = Math.max(0, Math.min(mapHeight - GAME_CONFIG.TILE_SIZE, targetPosition.y + offsetY));
+              unit.position = { x: newX, y: newY };
+              unit.state = UnitState.IDLE;
+              unit.target = null;
+              unit.waypoints = [];
+              gameEventBus.emit('unit:teleport', { unitId: unit.id, position: { ...unit.position }, faction: player.faction });
+            }
           }
+        }
+
+        // Destroy killed infantry units
+        for (const unitId of teleportedInfantryIds) {
+          get().destroyUnit(unitId);
         }
 
         gameEventBus.emit('superweapon:activated', { type: BuildingType.CHRONOSPHERE, position: targetPosition, faction: player.faction });
@@ -3430,6 +3511,19 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       // Apply the ability effect to game state
       applyAbilityEffect(effect, player, position);
       gameEventBus.emit('ui:notification', { message: `使用了${ability.name}！`, type: 'success' });
+    });
+  },
+
+  setSpyInfiltrateTarget: (spyId, buildingId) => {
+    set(state => {
+      const allPlayers = [state.currentPlayer, ...state.aiPlayers].filter(Boolean) as Player[];
+      for (const player of allPlayers) {
+        const unit = player.units.find(u => u.id === spyId);
+        if (unit && unit.type === UnitType.SPY) {
+          unit.target = buildingId;
+          break;
+        }
+      }
     });
   },
 
@@ -3460,8 +3554,11 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
 
     const visibleTiles = new Set<string>();
 
-    // Spy Satellite: all tiles are visible
-    if (player?.researchedUpgrades.includes(UpgradeType.SPY_SATELLITE)) {
+    // Spy Satellite: all tiles are visible (upgrade-based or building-based)
+    const hasSpySatelliteBuilding = player?.buildings.some(
+      b => b.type === BuildingType.SPY_SATELLITE && b.isConstructed && b.isPowered
+    );
+    if (player?.researchedUpgrades.includes(UpgradeType.SPY_SATELLITE) || hasSpySatelliteBuilding) {
       for (let y = 0; y < map.height; y++) {
         for (let x = 0; x < map.width; x++) {
           visibleTiles.add(`${x},${y}`);
