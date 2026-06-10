@@ -189,12 +189,12 @@ export const ResourceBar: React.FC = () => {
             <span className="count-value">{totalBuildings}</span>
             <span className="count-label">建筑</span>
           </div>
-          <div className={`count-item speed-${gameSpeed}`} onClick={() => setGameSpeed(((gameSpeed % 4) + 1) as 1 | 2 | 3 | 4)} title="点击切换游戏速度" style={{ cursor: 'pointer' }}>
+          <div className={`count-item speed-${gameSpeed}`} onClick={() => setGameSpeed(((gameSpeed % 4) + 1) as 1 | 2 | 3 | 4)} title="点击切换游戏速度">
             <span className="count-icon">{gameSpeed >= 4 ? '⚡⚡' : gameSpeed >= 3 ? '⚡' : '⏵'}</span>
             <span className="count-value">{gameSpeed}x</span>
             <span className="count-label">速度</span>
           </div>
-          <div className="count-item surrender-btn" onClick={() => { if (window.confirm('确定要投降吗？')) useGameStore.getState().surrender(); }} title="投降" style={{ cursor: 'pointer' }}>
+          <div className="count-item surrender-btn" onClick={() => { if (window.confirm('确定要投降吗？')) useGameStore.getState().surrender(); }} title="投降">
             <span className="count-icon">🏳️</span>
             <span className="count-label">投降</span>
           </div>

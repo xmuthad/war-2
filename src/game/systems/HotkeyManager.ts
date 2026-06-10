@@ -53,7 +53,18 @@ export type HotkeyAction =
   | 'addToGroup7'
   | 'addToGroup8'
   | 'addToGroup9'
-  | 'cycleNextUnit';
+  | 'cycleNextUnit'
+  | 'chronoShift'
+  | 'deploy'
+  | 'garrison'
+  | 'ungarrison'
+  | 'capture'
+  | 'superweaponNuke'
+  | 'superweaponIronCurtain'
+  | 'superweaponChronosphere'
+  | 'submerge'
+  | 'surface'
+  | 'spyDisguise';
 
 /**
  * Represents a hotkey binding configuration
@@ -146,7 +157,18 @@ export const DEFAULT_HOTKEY_BINDINGS: HotkeyBinding[] = [
   { action: 'addToGroup7', key: 'SHIFT+CTRL+7', description: '添加到编队7' },
   { action: 'addToGroup8', key: 'SHIFT+CTRL+8', description: '添加到编队8' },
   { action: 'addToGroup9', key: 'SHIFT+CTRL+9', description: '添加到编队9' },
-  { action: 'cycleNextUnit', key: 'TAB', description: '循环选择单位' }
+  { action: 'cycleNextUnit', key: 'TAB', description: '循环选择单位' },
+  { action: 'chronoShift', key: 'C', description: '时空转移' },
+  { action: 'deploy', key: 'D', description: '部署' },
+  { action: 'garrison', key: 'SHIFT+G', description: '驻扎' },
+  { action: 'ungarrison', key: 'CTRL+G', description: '解除驻扎' },
+  { action: 'capture', key: 'CTRL+E', description: '占领' },
+  { action: 'superweaponNuke', key: 'N', description: '核弹超武' },
+  { action: 'superweaponIronCurtain', key: 'I', description: '铁幕超武' },
+  { action: 'superweaponChronosphere', key: 'SHIFT+C', description: '超时空传送超武' },
+  { action: 'submerge', key: 'SHIFT+S', description: '下潜' },
+  { action: 'surface', key: 'SHIFT+U', description: '上浮' },
+  { action: 'spyDisguise', key: 'SHIFT+D', description: '间谍伪装' }
 ];
 
 /**

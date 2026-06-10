@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
   color: #fff;
   padding: 20px;
   box-sizing: border-box;
@@ -49,6 +49,7 @@
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 215, 0, 0.3);
 }
 
 .btn-secondary:disabled {
@@ -62,7 +63,7 @@
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 4px 15px rgba(var(--color-primary-rgb), 0.4);
 }
 
@@ -72,7 +73,7 @@
 }
 
 .btn-play:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 4px 15px rgba(68, 204, 68, 0.4);
 }
 
@@ -84,7 +85,7 @@
   padding: 15px;
   background: rgba(0, 0, 0, 0.4);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.15);
 }
 
 .tool-section {
@@ -324,7 +325,7 @@
   align-items: center;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.15);
   overflow: hidden;
 }
 
@@ -464,9 +465,9 @@
 }
 
 .map-editor-dialog {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 8px;
   padding: 24px;
   min-width: 320px;
   max-width: 500px;
@@ -509,6 +510,7 @@
 .map-editor-dialog-item:hover {
   background: rgba(var(--color-primary-rgb), 0.2);
   border-color: var(--color-primary);
+  transform: translateX(4px);
 }
 
 .map-editor-dialog-item-size {

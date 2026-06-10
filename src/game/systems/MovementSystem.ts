@@ -1,10 +1,32 @@
 import type { Unit } from '../../types';
-import { UnitState, UnitType } from '../../types';
+import { UnitState, UnitType, TileType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { mapManager } from '../map/MapManager';
 import { useGameStore } from '../../store/gameStore';
 import { PathfindingManager } from './PathfindingManager';
 import { terrainHeightSystem } from './TerrainHeightSystem';
+
+/** Check if a tile type is walkable land for amphibious units (TRANSPORT_SHIP) */
+function isAmphibiousWalkable(tileType: TileType | undefined): boolean {
+  if (!tileType) return false;
+  return tileType === TileType.GRASS ||
+    tileType === TileType.SAND ||
+    tileType === TileType.ROAD ||
+    tileType === TileType.RUBBLE ||
+    tileType === TileType.ORE ||
+    tileType === TileType.ICE ||
+    tileType === TileType.MUD ||
+    tileType === TileType.CRATER ||
+    tileType === TileType.WATER;
+}
+
+/** Check if a position is traversable for a transport ship (water or walkable land) */
+function isTransportShipWalkable(worldX: number, worldY: number): boolean {
+  if (mapManager.isWaterAtPosition(worldX, worldY)) return true;
+  const tile = mapManager.getTileAtPosition(worldX, worldY);
+  if (!tile) return false;
+  return isAmphibiousWalkable(tile.type);
+}
 
 function getDirectionFromDelta(dx: number, dy: number): number {
   return Math.atan2(dy, dx);
@@ -39,13 +61,16 @@ export class MovementSystem {
   requestPath(unit: Unit, targetX: number, targetY: number): void {
     if (!this.pathfindingManager) return;
 
+    const isAmphibious = unit.type === UnitType.TRANSPORT_SHIP;
+
     const result = this.pathfindingManager.findPath(
       unit.position.x, unit.position.y,
       targetX, targetY,
       1,
       !!unit.isAirborne,
       !!unit.isNaval,
-      unit.id
+      unit.id,
+      isAmphibious
     );
 
     if (result.success && result.path.length > 1) {
@@ -61,8 +86,22 @@ export class MovementSystem {
     // Skip units inside a transport
     if (unit.transportId) return;
 
+    // Skip chrono-frozen units (cannot move)
+    if ((unit.chronoFreezeProgress || 0) > 0) return;
+
     // Skip CHRONO units that are currently chrono-shifting (cooldown is ok - they can move normally)
     if (unit.type === UnitType.CHRONO && unit.isChronoShifting) return;
+
+    // Skip movement if grappled by squid
+    if (unit._grappledBySquid) {
+      const gameTime = useGameStore.getState().gameTime;
+      if (unit._grappleUntil !== undefined && unit._grappleUntil > gameTime) {
+        return; // Still grappled, cannot move
+      }
+      // Grapple expired, clear it
+      unit._grappledBySquid = undefined;
+      unit._grappleUntil = undefined;
+    }
 
     switch (unit.state) {
       case UnitState.MOVING:
@@ -84,7 +123,20 @@ export class MovementSystem {
 
   updateWithAvoidance(unit: Unit, allUnits: Unit[], deltaTime: number): void {
     if (unit.transportId) return;
+    // Skip chrono-frozen units (cannot move)
+    if ((unit.chronoFreezeProgress || 0) > 0) return;
     if (unit.type === UnitType.CHRONO && unit.isChronoShifting) return;
+
+    // Skip movement if grappled by squid
+    if (unit._grappledBySquid) {
+      const gameTime = useGameStore.getState().gameTime;
+      if (unit._grappleUntil !== undefined && unit._grappleUntil > gameTime) {
+        return; // Still grappled, cannot move
+      }
+      // Grapple expired, clear it
+      unit._grappledBySquid = undefined;
+      unit._grappleUntil = undefined;
+    }
 
     // Stuck detection: if unit hasn't moved significantly, clear its path
     if (unit.state === UnitState.MOVING || unit.state === UnitState.ATTACKING || unit.state === UnitState.RETREATING) {
@@ -223,7 +275,10 @@ export class MovementSystem {
           }
         }
         const adjustedSpeed = moveSpeed * costFactor / heightPenalty;
-        const ratio = Math.min(1, adjustedSpeed / dist);
+        // Transport ship moves at half speed on land
+        const amphibiousPenalty = (unit.type === UnitType.TRANSPORT_SHIP && !mapManager.isWaterAtPosition(unit.position.x, unit.position.y)) ? 0.5 : 1;
+        const finalSpeed = adjustedSpeed * amphibiousPenalty;
+        const ratio = Math.min(1, finalSpeed / dist);
         let newX = unit.position.x + dx * ratio;
         let newY = unit.position.y + dy * ratio;
 
@@ -232,8 +287,17 @@ export class MovementSystem {
         newX += avoidance.x;
         newY += avoidance.y;
 
-        // Naval units can only move on water
-        if (unit.isNaval && !mapManager.isWaterAtPosition(newX, newY)) {
+        // Naval units can only move on water (except TRANSPORT_SHIP which is amphibious)
+        if (unit.isNaval && unit.type !== UnitType.TRANSPORT_SHIP && !mapManager.isWaterAtPosition(newX, newY)) {
+          if (unit.isAttackMoving) {
+            unit.state = UnitState.GUARDING;
+            unit.isAttackMoving = false;
+          } else {
+            unit.state = UnitState.IDLE;
+          }
+          unit.waypoints = [];
+        } else if (unit.type === UnitType.TRANSPORT_SHIP && !isTransportShipWalkable(newX, newY)) {
+          // Transport ship: can move on water and walkable land, but not mountains/forests/cliffs
           if (unit.isAttackMoving) {
             unit.state = UnitState.GUARDING;
             unit.isAttackMoving = false;
@@ -263,7 +327,8 @@ export class MovementSystem {
         const newX = unit.position.x + avoidance.x;
         const newY = unit.position.y + avoidance.y;
         const canMove = unit.isAirborne ||
-          (unit.isNaval && mapManager.isWaterAtPosition(newX, newY)) ||
+          (unit.type === UnitType.TRANSPORT_SHIP && isTransportShipWalkable(newX, newY)) ||
+          (unit.isNaval && unit.type !== UnitType.TRANSPORT_SHIP && mapManager.isWaterAtPosition(newX, newY)) ||
           (!unit.isNaval && mapManager.isWalkableAtPosition(newX, newY));
         if (canMove) {
           unit.position.x = newX;
@@ -301,8 +366,11 @@ export class MovementSystem {
         newX += avoidance.x;
         newY += avoidance.y;
 
-        // Naval units can only move on water
-        if (unit.isNaval && !mapManager.isWaterAtPosition(newX, newY)) {
+        // Naval units can only move on water (except TRANSPORT_SHIP which is amphibious)
+        if (unit.isNaval && unit.type !== UnitType.TRANSPORT_SHIP && !mapManager.isWaterAtPosition(newX, newY)) {
+          unit.state = UnitState.IDLE;
+          unit.waypoints = [];
+        } else if (unit.type === UnitType.TRANSPORT_SHIP && !isTransportShipWalkable(newX, newY)) {
           unit.state = UnitState.IDLE;
           unit.waypoints = [];
         } else if (!unit.isAirborne && !unit.isNaval && !mapManager.isWalkableAtPosition(newX, newY)) {
@@ -358,12 +426,24 @@ export class MovementSystem {
           }
         }
         const adjustedSpeed = moveSpeed * costFactor / heightPenalty;
-        const ratio = Math.min(1, adjustedSpeed / dist);
+        // Transport ship moves at half speed on land
+        const amphibiousPenalty = (unit.type === UnitType.TRANSPORT_SHIP && !mapManager.isWaterAtPosition(unit.position.x, unit.position.y)) ? 0.5 : 1;
+        const finalSpeed = adjustedSpeed * amphibiousPenalty;
+        const ratio = Math.min(1, finalSpeed / dist);
         const newX = unit.position.x + dx * ratio;
         const newY = unit.position.y + dy * ratio;
 
-        // Naval units can only move on water
-        if (unit.isNaval && !mapManager.isWaterAtPosition(newX, newY)) {
+        // Naval units can only move on water (except TRANSPORT_SHIP which is amphibious)
+        if (unit.isNaval && unit.type !== UnitType.TRANSPORT_SHIP && !mapManager.isWaterAtPosition(newX, newY)) {
+          if (unit.isAttackMoving) {
+            unit.state = UnitState.GUARDING;
+            unit.isAttackMoving = false;
+          } else {
+            unit.state = UnitState.IDLE;
+          }
+          unit.waypoints = [];
+        } else if (unit.type === UnitType.TRANSPORT_SHIP && !isTransportShipWalkable(newX, newY)) {
+          // Transport ship: can move on water and walkable land, but not mountains/forests/cliffs
           if (unit.isAttackMoving) {
             unit.state = UnitState.GUARDING;
             unit.isAttackMoving = false;
@@ -412,8 +492,11 @@ export class MovementSystem {
         const newX = unit.position.x + dx * ratio;
         const newY = unit.position.y + dy * ratio;
 
-        // Naval units can only move on water
-        if (unit.isNaval && !mapManager.isWaterAtPosition(newX, newY)) {
+        // Naval units can only move on water (except TRANSPORT_SHIP which is amphibious)
+        if (unit.isNaval && unit.type !== UnitType.TRANSPORT_SHIP && !mapManager.isWaterAtPosition(newX, newY)) {
+          unit.state = UnitState.IDLE;
+          unit.waypoints = [];
+        } else if (unit.type === UnitType.TRANSPORT_SHIP && !isTransportShipWalkable(newX, newY)) {
           unit.state = UnitState.IDLE;
           unit.waypoints = [];
         } else if (!unit.isAirborne && !unit.isNaval && !mapManager.isWalkableAtPosition(newX, newY)) {

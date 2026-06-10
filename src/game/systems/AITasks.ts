@@ -72,7 +72,12 @@ export type AIActionType =
   | 'garrison'
   | 'ungarrison'
   | 'deploy'
-  | 'repairBridge';
+  | 'repairBridge'
+  | 'spyInfiltrate'
+  | 'chronoAmbush'
+  | 'ivanSabotage'
+  | 'desolatorDeploy'
+  | 'navalAssault';
 
 export const createConditionCheck = (
   id: string,

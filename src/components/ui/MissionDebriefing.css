@@ -24,12 +24,32 @@
   position: relative;
   width: 90%;
   max-width: 800px;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border-radius: 20px;
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
+  border-radius: 8px;
   padding: 40px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
   animation: slideUp 0.5s ease;
+}
+
+.debriefing-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,215,0,0.3), transparent);
+}
+
+.debriefing-content::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.6), transparent);
 }
 
 @keyframes slideUp {
@@ -60,14 +80,14 @@
 }
 
 .result-title {
-  font-size: 48px;
+  font-size: 2.8rem;
   margin: 0 0 10px 0;
   font-weight: bold;
 }
 
 .result-subtitle {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.1rem;
+  color: rgba(255, 215, 0, 0.7);
   margin: 0;
 }
 
@@ -81,9 +101,9 @@
   padding: 10px 30px;
   background: rgba(255, 215, 0, 0.1);
   border: 1px solid rgba(255, 215, 0, 0.3);
-  border-radius: 25px;
+  border-radius: 20px;
   color: #FFD700;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: bold;
 }
 
@@ -92,12 +112,12 @@
   margin-bottom: 30px;
   padding: 20px;
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 15px;
+  border-radius: 8px;
 }
 
 .rating-label {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  color: rgba(255, 215, 0, 0.6);
   margin-bottom: 10px;
 }
 
@@ -109,7 +129,7 @@
 }
 
 .rating-value {
-  font-size: 24px;
+  font-size: 1.4rem;
   color: #FFD700;
   font-weight: bold;
 }
@@ -123,7 +143,7 @@
 
 .stat-card {
   background: rgba(0, 0, 0, 0.2);
-  border-radius: 15px;
+  border-radius: 8px;
   padding: 25px 15px;
   text-align: center;
   transition: all 0.3s;
@@ -131,7 +151,7 @@
 
 .stat-card:hover {
   background: rgba(0, 0, 0, 0.3);
-  transform: translateY(-5px);
+  transform: translateY(-3px);
 }
 
 .stat-icon {
@@ -140,7 +160,7 @@
 }
 
 .stat-value {
-  font-size: 32px;
+  font-size: 1.8rem;
   font-weight: bold;
   color: #fff;
   margin-bottom: 5px;
@@ -151,8 +171,8 @@
 }
 
 .stat-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.72rem;
+  color: rgba(255, 215, 0, 0.6);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -160,7 +180,7 @@
 .rewards-section {
   background: rgba(255, 215, 0, 0.1);
   border: 2px solid rgba(255, 215, 0, 0.3);
-  border-radius: 15px;
+  border-radius: 8px;
   padding: 25px;
   margin-bottom: 30px;
   text-align: center;
@@ -180,7 +200,7 @@
 
 .rewards-section h3 {
   margin: 0 0 20px 0;
-  font-size: 20px;
+  font-size: 1.2rem;
   color: #FFD700;
 }
 
@@ -202,14 +222,14 @@
 }
 
 .reward-value {
-  font-size: 28px;
+  font-size: 1.6rem;
   font-weight: bold;
   color: #FFD700;
 }
 
 .reward-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.72rem;
+  color: rgba(255, 215, 0, 0.6);
 }
 
 .action-buttons {
@@ -222,7 +242,7 @@
 .continue-button {
   padding: 15px 40px;
   border-radius: 10px;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s;
@@ -238,7 +258,7 @@
 
 .retry-button:hover {
   background: rgba(255, 68, 68, 0.1);
-  transform: scale(1.05);
+  transform: scale(1.02) translateY(-1px);
 }
 
 .continue-button {
@@ -249,7 +269,7 @@
 }
 
 .continue-button:hover {
-  transform: scale(1.05);
+  transform: scale(1.02) translateY(-1px);
   box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
 }
 

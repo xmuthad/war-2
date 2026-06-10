@@ -1,13 +1,13 @@
 .saveload-button {
   position: fixed;
   top: 6px;
-  right: 60px;
-  width: 24px;
-  height: 24px;
+  right: 112px;
+  width: 28px;
+  height: 28px;
   background: rgba(30, 30, 30, 0.9);
   border: 1px solid rgba(255, 215, 0, 0.3);
   border-radius: 6px;
-  color: #fff;
+  color: var(--color-text-primary, #e0e0e0);
   font-size: 0.7rem;
   cursor: pointer;
   z-index: 50;
@@ -20,15 +20,15 @@
 .saveload-button:hover {
   background: rgba(50, 50, 50, 0.95);
   border-color: #FFD700;
-  transform: scale(1.05);
+  transform: scale(1.05) translateY(-1px);
 }
 
 .saveload-save {
-  right: 60px;
+  right: 112px;
 }
 
 .saveload-load {
-  right: 88px;
+  right: 140px;
 }
 
 .saveload-overlay {
@@ -46,16 +46,37 @@
 }
 
 .saveload-panel {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
   border: 1px solid rgba(255, 215, 0, 0.5);
-  border-radius: 10px;
+  border-radius: 6px;
   width: 85%;
   max-width: 400px;
   max-height: 65vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.1);
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.05);
   animation: slideIn 0.3s ease-out;
+}
+
+.saveload-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,215,0,0.3), transparent);
+}
+
+.saveload-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.6), transparent);
 }
 
 .saveload-header {
@@ -102,12 +123,14 @@
 .slot-item:hover {
   background: rgba(255, 215, 0, 0.1);
   border-color: rgba(255, 215, 0, 0.3);
+  transform: translateY(-2px);
 }
 
 .slot-item.selected {
   background: rgba(255, 215, 0, 0.15);
   border-color: #FFD700;
   box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+  transform: translateY(-1px);
 }
 
 .slot-item.empty {
@@ -156,7 +179,7 @@
 }
 
 .slot-name {
-  color: #fff;
+  color: var(--color-text-primary, #e0e0e0);
   font-weight: 600;
   font-size: 0.95rem;
   margin-bottom: 6px;
@@ -166,7 +189,7 @@
 }
 
 .slot-badge {
-  font-size: 0.5rem;
+  font-size: 0.6rem;
   padding: 1px 4px;
   background: rgba(68, 255, 68, 0.2);
   border: 1px solid rgba(68, 255, 68, 0.4);
@@ -199,7 +222,7 @@
 .slot-details {
   display: flex;
   justify-content: space-between;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -256,7 +279,7 @@
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 215, 0, 0.3);
   border-radius: 6px;
-  color: #fff;
+  color: var(--color-text-primary, #e0e0e0);
   font-size: 0.8rem;
   margin-bottom: 8px;
   transition: all 0.2s ease;
@@ -301,7 +324,7 @@
 
 .footer-hint {
   color: rgba(255, 255, 255, 0.4);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
 }
 
 .footer-actions {
@@ -322,6 +345,7 @@
 
 .cancel-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
 }
 
 .save-btn,
@@ -343,7 +367,7 @@
 .save-btn:hover,
 .load-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0.2) 100%);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
 }
 
@@ -367,9 +391,9 @@
 }
 
 .delete-confirm-dialog {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
   border: 2px solid rgba(255, 68, 68, 0.5);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 14px;
   max-width: 300px;
   text-align: center;

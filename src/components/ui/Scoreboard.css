@@ -13,13 +13,34 @@
 }
 
 .scoreboard-panel {
-  background: linear-gradient(135deg, #1a1a2e, #16213e);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 6px;
   padding: 20px 24px;
   min-width: 560px;
   max-width: 90vw;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  position: relative;
+}
+
+.scoreboard-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,215,0,0.3), transparent);
+}
+
+.scoreboard-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.6), transparent);
 }
 
 .scoreboard-header {
@@ -33,13 +54,14 @@
 
 .scoreboard-header h2 {
   margin: 0;
-  color: #e0e0e0;
-  font-size: 18px;
+  color: #FFD700;
+  font-size: 1.15rem;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
 }
 
 .scoreboard-time {
-  color: #888;
-  font-size: 14px;
+  color: rgba(255, 215, 0, 0.7);
+  font-size: 0.85rem;
   margin-left: auto;
 }
 
@@ -52,16 +74,16 @@
   width: 100%;
   border-collapse: collapse;
   color: #ccc;
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .scoreboard-table th {
   text-align: left;
   padding: 8px 12px;
-  color: #888;
+  color: rgba(255, 215, 0, 0.7);
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.15);
+  font-size: 0.72rem;
   text-transform: uppercase;
 }
 
@@ -75,10 +97,14 @@
   text-decoration: line-through;
 }
 
+.scoreboard-table tr:hover td {
+  background: rgba(255, 215, 0, 0.05);
+}
+
 .player-color-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   margin-right: 8px;
   vertical-align: middle;

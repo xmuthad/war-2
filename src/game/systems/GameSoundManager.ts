@@ -99,7 +99,22 @@ export const SOUND_EFFECTS: Record<string, SoundEffect> = {
   upgradeStarted: { key: 'upgrade_started', category: 'building', volume: 0.4 },
   nukeExplosion: { key: 'nuke_explosion', category: 'combat', volume: 0.9 },
   ironCurtain: { key: 'iron_curtain', category: 'combat', volume: 0.6 },
-  chronosphere: { key: 'chronosphere', category: 'combat', volume: 0.6 }
+  chronosphere: { key: 'chronosphere', category: 'combat', volume: 0.6 },
+  bombTick: { key: 'bomb_tick', category: 'combat', volume: 0.5 },
+  radiationDeploy: { key: 'radiation_deploy', category: 'combat', volume: 0.6 },
+  submarineDive: { key: 'submarine_dive', category: 'movement', volume: 0.5 },
+  submarineSurface: { key: 'submarine_surface', category: 'movement', volume: 0.5 },
+  dolphinSonar: { key: 'dolphin_sonar', category: 'combat', volume: 0.5 },
+  squidGrapple: { key: 'squid_grapple', category: 'combat', volume: 0.5 },
+  spyInfiltrate: { key: 'spy_infiltrate', category: 'ui', volume: 0.5 },
+  dogInstantKill: { key: 'dog_instant_kill', category: 'combat', volume: 0.6 },
+  terroristSuicide: { key: 'terrorist_suicide', category: 'combat', volume: 0.8 },
+  gapGenerator: { key: 'gap_generator', category: 'building', volume: 0.5 },
+  aircraftRearm: { key: 'aircraft_rearm', category: 'movement', volume: 0.4 },
+  spySatelliteActivate: { key: 'spy_satellite_activate', category: 'ui', volume: 0.6 },
+  orePurifier: { key: 'ore_purifier', category: 'building', volume: 0.4 },
+  nuclearReactorExplode: { key: 'nuclear_reactor_explode', category: 'combat', volume: 0.9 },
+  grandCannonFire: { key: 'grand_cannon_fire', category: 'combat', volume: 0.7 }
 };
 
 /**

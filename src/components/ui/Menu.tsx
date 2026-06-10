@@ -530,13 +530,12 @@ export const Menu: React.FC = () => {
               快速开始
             </button>
             <button
-              className={`start-button ${!tutorialCompleted ? 'tutorial-highlight' : ''}`}
+              className={`start-button tutorial-button ${!tutorialCompleted ? 'tutorial-highlight' : ''}`}
               onClick={handleStartTutorial}
-              style={{ background: 'linear-gradient(135deg, #1a5a2a, #2a8a4a)' }}
             >
               📖 新手教程
             </button>
-            <button className="start-button" onClick={() => setGameState(GameState.CAMPAIGN_SELECT)} style={{ background: 'linear-gradient(135deg, #8B4513, #D2691E)' }}>
+            <button className="start-button campaign-button" onClick={() => setGameState(GameState.CAMPAIGN_SELECT)}>
               战役模式
             </button>
           </div>

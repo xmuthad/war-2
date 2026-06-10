@@ -41,7 +41,12 @@ export type GameEventType =
   | 'sound:play'
   | 'settings:volumeChanged'
   | 'radiation:deploy'
-  | 'nuclear:explosion';
+  | 'nuclear:explosion'
+  | 'notification:info'
+  | 'notification:warning'
+  | 'notification:danger'
+  | 'notification:success'
+  | 'notification:special';
 
 export interface GameEvent {
   type: GameEventType;

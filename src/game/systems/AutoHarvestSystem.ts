@@ -1,6 +1,8 @@
-import { Player, Unit, UnitState, GameMapData, UpgradeType, Building, BuildingType, ResourceNode } from '../../types';
+import { Player, Unit, UnitState, GameMapData, UpgradeType, Building, BuildingType, ResourceNode, UnitType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { gameEventBus } from './GameEventBus';
+
+const CHRONO_SHIFT_DURATION = 1; // 1 second teleport animation/delay
 
 function getDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   const dx = a.x - b.x;
@@ -34,6 +36,11 @@ export class AutoHarvestSystem {
         if (refinery) {
           unit.state = UnitState.RETURNING;
           unit.target = refinery.id;
+          // Chrono Miner: start teleport instead of walking
+          if (unit.type === UnitType.CHRONO_MINER) {
+            unit.isChronoShifting = true;
+            unit.chronoShiftTimer = CHRONO_SHIFT_DURATION;
+          }
           continue;
         }
       }
@@ -52,6 +59,13 @@ export class AutoHarvestSystem {
     // Also handle miners that have returned to refinery - auto-dump and continue
     for (const unit of player.units) {
       if (unit.state !== UnitState.RETURNING || !unit.data.canHarvest) continue;
+
+      // Chrono Miner: handle teleport charging
+      if (unit.type === UnitType.CHRONO_MINER && unit.isChronoShifting) {
+        // Teleport timer is handled by HarvestSystem.updateReturning
+        // Just skip the distance check here
+        continue;
+      }
 
       const refinery = player.buildings.find(b => b.id === unit.target);
       if (!refinery) continue;

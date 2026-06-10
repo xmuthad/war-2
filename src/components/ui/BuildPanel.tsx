@@ -7,14 +7,15 @@ import { gameEventBus } from '../../game/systems/GameEventBus';
 import './BuildPanel.css';
 
 type TabType = 'buildings' | 'units' | 'tech';
-type BuildingCategory = 'all' | 'economy' | 'production' | 'defense' | 'tech' | 'superweapon';
+type BuildingCategory = 'all' | 'economy' | 'production' | 'defense' | 'tech' | 'special' | 'superweapon';
 
 const BUILDING_CATEGORIES: Record<BuildingCategory, { label: string; types: BuildingType[] }> = {
   all: { label: '全部', types: [] },
-  economy: { label: '经济', types: [BuildingType.REFINERY, BuildingType.POWER, BuildingType.REPAIR] },
+  economy: { label: '经济', types: [BuildingType.REFINERY, BuildingType.POWER, BuildingType.REPAIR, BuildingType.ORE_PURIFIER] },
   production: { label: '生产', types: [BuildingType.BARRACKS, BuildingType.WARFACTORY, BuildingType.HELIPAD, BuildingType.NAVAL_SHIPYARD, BuildingType.AIRFIELD] },
-  defense: { label: '防御', types: [BuildingType.TURRET, BuildingType.TESLA_COIL, BuildingType.WALL, BuildingType.DEFENSE, BuildingType.FLAME_TOWER] },
-  tech: { label: '科技', types: [BuildingType.RADAR, BuildingType.TECH] },
+  defense: { label: '防御', types: [BuildingType.TURRET, BuildingType.TESLA_COIL, BuildingType.WALL, BuildingType.DEFENSE, BuildingType.FLAME_TOWER, BuildingType.FLAK_CANNON, BuildingType.GRAND_CANNON] },
+  tech: { label: '科技', types: [BuildingType.RADAR, BuildingType.TECH, BuildingType.SPY_SATELLITE, BuildingType.GAP_GENERATOR] },
+  special: { label: '特殊', types: [BuildingType.NUCLEAR_REACTOR, BuildingType.INDUSTRIAL_PLANT] },
   superweapon: { label: '超武', types: [BuildingType.NUCLEAR_SILO, BuildingType.CHRONOSPHERE, BuildingType.IRON_CURTAIN] },
 };
 

@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { tileDiamond } from './IsometricUtils';
-import { BuildingType } from '../../types';
+import { BuildingType, UnitType } from '../../types';
+import type { Unit, Building } from '../../types';
+import { submarineSystem, SUBMERSIBLE_TYPES, DETECTOR_BUILDING_TYPES, DOLPHIN_DETECTION_RANGE, SUBMARINE_MUTUAL_DETECTION_RANGE, DETECTOR_BUILDING_RANGE } from '../systems/SubmarineSystem';
+import { GAME_CONFIG } from '../config/GameConfig';
 
 export type FogState = 'hidden' | 'explored' | 'visible';
 
@@ -504,5 +507,16 @@ export class FogOfWar {
     }>
   ): void {
     this.addPsychicSensorObservers(buildings);
+  }
+
+  /**
+   * Check if a submerged enemy submarine is detected by the given friendly units and buildings.
+   * Submerged submarines are invisible unless detected by:
+   * - Friendly DOLPHIN within 5 tiles
+   * - Friendly SPY_SATELLITE or RADAR building within 10 tiles
+   * - Another friendly submerged submarine within 3 tiles
+   */
+  isSubmarineDetected(submarine: Unit, friendlyUnits: Unit[], friendlyBuildings: Building[]): boolean {
+    return submarineSystem.isSubmarineDetected(submarine, friendlyUnits, friendlyBuildings);
   }
 }

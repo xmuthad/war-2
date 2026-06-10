@@ -10,6 +10,11 @@ export const INFANTRY_UNIT_TYPES = new Set<UnitType>([
   UnitType.ATTACK_DOG, UnitType.GI, UnitType.GUARDIAN_GI, UnitType.BRUTE,
 ]);
 
+export const ANTI_AIR_BUILDING_TYPES = new Set<BuildingType>([
+  BuildingType.PATRIOT,
+  BuildingType.FLAK_CANNON,
+]);
+
 export interface TerroristExplosion {
   position: Vector2;
   radius: number;
@@ -111,6 +116,10 @@ const INFANTRY_TYPES = new Set<UnitType>([
   UnitType.IVAN,
   UnitType.CHRONO,
   UnitType.SPY,
+  UnitType.ATTACK_DOG,
+  UnitType.GI,
+  UnitType.GUARDIAN_GI,
+  UnitType.BRUTE,
 ]);
 
 const LIGHT_VEHICLE_TYPES = new Set<UnitType>([
@@ -506,7 +515,7 @@ export class CombatSystem {
 
     return {
       position: { ...attacker.position },
-      radius: 3, // 3 tiles
+      radius: 2, // 2 tiles splash radius
       damage: 200,
       faction: attacker.faction,
     };

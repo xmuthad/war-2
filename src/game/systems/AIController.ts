@@ -322,6 +322,44 @@ export class AIController {
             return true;
           }
           break;
+
+        case 'spyInfiltrate':
+          if (action.unitId && action.position) {
+            gameCommands.moveUnit(action.unitId, action.position);
+            return true;
+          }
+          break;
+
+        case 'chronoAmbush':
+          if (action.unitId && action.position) {
+            gameCommands.chronoShiftUnit(action.unitId, action.position);
+            return true;
+          }
+          break;
+
+        case 'ivanSabotage':
+          if (action.unitId && action.targetId) {
+            gameCommands.attackUnit(action.unitId, action.targetId);
+            return true;
+          }
+          break;
+
+        case 'desolatorDeploy':
+          if (action.unitId) {
+            useGameStore.getState().startDeploy(action.unitId);
+            return true;
+          }
+          break;
+
+        case 'navalAssault':
+          if (action.unitId && action.position) {
+            gameCommands.moveUnit(action.unitId, action.position);
+            if (action.targetId) {
+              gameCommands.attackUnit(action.unitId, action.targetId);
+            }
+            return true;
+          }
+          break;
       }
 
       return false;

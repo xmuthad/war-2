@@ -43,7 +43,12 @@ export class IvanBombSystem {
 
     // Decrement timers
     for (const bomb of this.bombs) {
+      const prevTimer = bomb.timer;
       bomb.timer -= deltaTime;
+      // Play tick sound each second
+      if (Math.floor(prevTimer) !== Math.floor(bomb.timer) && bomb.timer > 0) {
+        gameEventBus.emit('sound:play', { key: 'bombTick', position: bomb.targetPosition });
+      }
     }
 
     // Process detonated bombs
@@ -127,6 +132,10 @@ export class IvanBombSystem {
 
   getBombs(): PendingBomb[] {
     return this.bombs;
+  }
+
+  restoreBombs(bombs: PendingBomb[]): void {
+    this.bombs = bombs;
   }
 }
 

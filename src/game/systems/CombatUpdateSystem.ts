@@ -1,7 +1,7 @@
 import type { Unit, Player, Vector2, Faction, Building } from '../../types';
 import { UnitState, TileType, UnitRank, UnitType, UpgradeType, BuildingType, getFactionGroup } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
-import { combatSystem, TerroristExplosion, DamageType, ArmorType, ProjectileType, SplashConfig, Projectile } from './CombatSystem';
+import { combatSystem, TerroristExplosion, DamageType, ArmorType, ProjectileType, SplashConfig, Projectile, ANTI_AIR_BUILDING_TYPES, INFANTRY_UNIT_TYPES } from './CombatSystem';
 import { ivanBombSystem } from './IvanBombSystem';
 import { mapManager } from '../map/MapManager';
 import { useGameStore } from '../../store/gameStore';
@@ -14,6 +14,15 @@ const ANTI_AIR_BUILDINGS = new Set<BuildingType>([
   BuildingType.TESLA_COIL,
   BuildingType.TURRET,
   BuildingType.DEFENSE,
+  BuildingType.PATRIOT,
+  BuildingType.FLAK_CANNON,
+  BuildingType.SENTRY_GUN,
+]);
+
+// Buildings that are dedicated anti-air (ONLY target airborne units)
+const DEDICATED_AA_BUILDINGS = new Set<BuildingType>([
+  BuildingType.PATRIOT,
+  BuildingType.FLAK_CANNON,
 ]);
 
 // Units that can target airborne enemies
@@ -22,6 +31,7 @@ const CAN_TARGET_AIR_TYPES = new Set<UnitType>([
   UnitType.FLAK,
   UnitType.ROCKET,
   UnitType.DESTROYER,
+  UnitType.AEGIS,
 ]);
 
 function distance(a: Vector2, b: Vector2): number {
@@ -197,6 +207,9 @@ export class CombatUpdateSystem {
   }
 
   private updateAttacking(unit: Unit, player: Player, allPlayers: Player[], deltaTime: number, destroyUnit: (unitId: string) => void, destroyBuilding: (buildingId: string) => void): void {
+    // Chrono-frozen units cannot attack
+    if ((unit.chronoFreezeProgress || 0) > 0) return;
+
     const enemyPlayers = allPlayers.filter(p =>
       isEnemy(unit.faction, player.teamId, p.faction, p.teamId)
     );
@@ -220,8 +233,8 @@ export class CombatUpdateSystem {
       return;
     }
 
-    // Cannot attack submerged submarines
-    if (targetUnit && targetUnit.isSubmerged) {
+    // Cannot attack submerged submarines (except DOLPHIN units)
+    if (targetUnit && targetUnit.isSubmerged && unit.type !== UnitType.DOLPHIN) {
       unit.state = UnitState.IDLE;
       unit.target = null;
       return;
@@ -275,11 +288,51 @@ export class CombatUpdateSystem {
         if (unit.type === UnitType.TERRORIST) {
           const explosion = combatSystem.handleTerroristAttack(unit);
           if (explosion) {
+            gameEventBus.emit('sound:play', { key: 'terroristSuicide', position: unit.position });
             explosion.teamId = player.teamId;
+            // Deal 400 direct damage to primary target
+            if (targetUnit) {
+              if (!targetUnit.isInvulnerable) {
+                const armorType = combatSystem.getArmorTypeForUnit(targetUnit.type);
+                const directDamage = combatSystem.calculateDamage(400, DamageType.EXPLOSIVE, armorType, targetUnit.armor);
+                targetUnit.health -= directDamage;
+                gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: targetUnit.id, damage: directDamage, position: targetUnit.position });
+                if (targetUnit.health <= 0) {
+                  unit.kills++;
+                  player.statistics.enemiesDestroyed++;
+                  promoteUnit(unit);
+                  gameEventBus.emit('combat:explosion', { position: targetUnit.position, unitType: targetUnit.type });
+                  const reward = Math.floor(targetUnit.cost * 0.2);
+                  if (reward > 0) player.money += reward;
+                  destroyUnit(targetUnit.id);
+                }
+              }
+            } else if (targetBuilding) {
+              const directDamage = combatSystem.calculateDamage(400, DamageType.EXPLOSIVE, ArmorType.STRUCTURE, 0);
+              targetBuilding.health -= directDamage;
+              gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: targetBuilding.id, damage: directDamage, position: targetBuilding.position });
+              if (targetBuilding.health <= 0) {
+                unit.kills++;
+                player.statistics.enemiesDestroyed++;
+                promoteUnit(unit);
+                gameEventBus.emit('combat:explosion', { position: targetBuilding.position, buildingType: targetBuilding.type });
+                const reward = Math.floor(targetBuilding.cost * 0.2);
+                if (reward > 0) player.money += reward;
+                const tilePos = mapManager.worldToTile(targetBuilding.position.x, targetBuilding.position.y);
+                for (let dy = 0; dy < targetBuilding.height; dy++) {
+                  for (let dx = 0; dx < targetBuilding.width; dx++) {
+                    mapManager.setTile(tilePos.x + dx, tilePos.y + dy, TileType.RUBBLE);
+                  }
+                }
+                destroyBuilding(targetBuilding.id);
+              }
+            }
+            // Apply 200 splash damage within 2 tile radius
             this.applyTerroristExplosion(explosion, allPlayers, destroyUnit, destroyBuilding);
           }
           // Mark as already exploded to prevent double explosion in destroyUnit
           (unit as unknown as Record<string, unknown>)._terroristExploded = true;
+          gameEventBus.emit('unit:destroyed', { unitId: unit.id, position: unit.position, unitType: unit.type });
           destroyUnit(unit.id);
           return;
         }
@@ -331,6 +384,88 @@ export class CombatUpdateSystem {
 
             // Tanya C4: 10x damage vs buildings, 5x vs vehicles
             baseDamage = combatSystem.calculateSpecialDamage(unit, currentTargetUnit, baseDamage);
+
+            // AEGIS cruiser: 2x damage against airborne units
+            if (unit.type === UnitType.AEGIS && currentTargetUnit.isAirborne) {
+              baseDamage *= 2;
+            }
+
+            // --- Attack Dog: instant kill infantry ---
+            if (unit.type === UnitType.ATTACK_DOG && INFANTRY_UNIT_TYPES.has(currentTargetUnit.type)) {
+              currentTargetUnit.health = 0;
+              gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetUnit.id, damage: currentTargetUnit.maxHealth, position: currentTargetUnit.position });
+              gameEventBus.emit('sound:play', { key: 'dogInstantKill', position: currentTargetUnit.position });
+              unit.kills++;
+              player.statistics.enemiesDestroyed++;
+              promoteUnit(unit);
+              gameEventBus.emit('combat:explosion', { position: currentTargetUnit.position, unitType: currentTargetUnit.type });
+              const reward = Math.floor(currentTargetUnit.cost * 0.2);
+              if (reward > 0) player.money += reward;
+              destroyUnit(currentTargetUnit.id);
+              unit.state = UnitState.IDLE;
+              unit.target = null;
+              combatSystem.setAttackCooldown(unit.id, cooldown);
+              break;
+            }
+
+            // --- Sniper: instant kill infantry ---
+            if (unit.type === UnitType.SNIPER && INFANTRY_UNIT_TYPES.has(currentTargetUnit.type)) {
+              currentTargetUnit.health = 0;
+              gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetUnit.id, damage: currentTargetUnit.maxHealth, position: currentTargetUnit.position });
+              gameEventBus.emit('sound:play', { key: 'sniperShot', position: currentTargetUnit.position });
+              unit.kills++;
+              player.statistics.enemiesDestroyed++;
+              promoteUnit(unit);
+              gameEventBus.emit('combat:explosion', { position: currentTargetUnit.position, unitType: currentTargetUnit.type });
+              const reward = Math.floor(currentTargetUnit.cost * 0.2);
+              if (reward > 0) player.money += reward;
+              destroyUnit(currentTargetUnit.id);
+              unit.state = UnitState.IDLE;
+              unit.target = null;
+              combatSystem.setAttackCooldown(unit.id, cooldown);
+              break;
+            }
+
+            // --- Chrono Legionnaire: freeze attack (no normal damage) ---
+            if (unit.type === UnitType.CHRONO) {
+              currentTargetUnit.chronoFreezeProgress = (currentTargetUnit.chronoFreezeProgress || 0) + deltaTime / 5;
+              if (currentTargetUnit.chronoFreezeProgress >= 1.0) {
+                // Fully erased from time - destroy the target
+                currentTargetUnit.health = 0;
+                gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetUnit.id, damage: currentTargetUnit.maxHealth, position: currentTargetUnit.position });
+                unit.kills++;
+                player.statistics.enemiesDestroyed++;
+                promoteUnit(unit);
+                gameEventBus.emit('combat:explosion', { position: currentTargetUnit.position, unitType: currentTargetUnit.type });
+                const reward = Math.floor(currentTargetUnit.cost * 0.2);
+                if (reward > 0) player.money += reward;
+                destroyUnit(currentTargetUnit.id);
+                unit.state = UnitState.IDLE;
+                unit.target = null;
+              } else {
+                gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetUnit.id, damage: 0, position: currentTargetUnit.position });
+              }
+              combatSystem.setAttackCooldown(unit.id, cooldown);
+              break;
+            }
+
+            // --- Dolphin: 1.5x damage vs naval, force submarines to surface ---
+            if (unit.type === UnitType.DOLPHIN) {
+              if (currentTargetUnit.isNaval) {
+                baseDamage = Math.floor(baseDamage * 1.5);
+              }
+              if (currentTargetUnit.isSubmerged) {
+                currentTargetUnit.isSubmerged = false;
+              }
+            }
+
+            // --- Squid: grapple naval targets ---
+            if (unit.type === UnitType.SQUID && currentTargetUnit.isNaval) {
+              if (!currentTargetUnit._grappledBySquid) {
+                currentTargetUnit._grappledBySquid = unit.id;
+                currentTargetUnit._grappleUntil = this.gameTime + 5; // 5 seconds grapple
+              }
+            }
 
             // Prism Tank focus attack
             if (unit.type === UnitType.PRISM) {
@@ -398,6 +533,62 @@ export class CombatUpdateSystem {
 
             // Tanya C4: 10x damage vs buildings
             baseDamage = combatSystem.calculateSpecialDamage(unit, currentTargetBuilding, baseDamage);
+
+            // --- Tanya/SEAL C4: instant 2000 damage to buildings ---
+            if (unit.type === UnitType.TANYA || unit.type === UnitType.SEAL) {
+              const c4Damage = 2000;
+              const finalC4Damage = combatSystem.calculateDamage(c4Damage, damageType, armorType, 0);
+              currentTargetBuilding.health -= finalC4Damage;
+              gameEventBus.emit('sound:play', { key: 'c4Plant', position: currentTargetBuilding.position });
+              gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetBuilding.id, damage: finalC4Damage, position: currentTargetBuilding.position });
+              if (currentTargetBuilding.health <= 0) {
+                unit.kills++;
+                player.statistics.enemiesDestroyed++;
+                promoteUnit(unit);
+                gameEventBus.emit('combat:explosion', { position: currentTargetBuilding.position, buildingType: currentTargetBuilding.type });
+                const reward = Math.floor(currentTargetBuilding.cost * 0.2);
+                if (reward > 0) player.money += reward;
+                const tilePos = mapManager.worldToTile(currentTargetBuilding.position.x, currentTargetBuilding.position.y);
+                for (let dy = 0; dy < currentTargetBuilding.height; dy++) {
+                  for (let dx = 0; dx < currentTargetBuilding.width; dx++) {
+                    mapManager.setTile(tilePos.x + dx, tilePos.y + dy, TileType.RUBBLE);
+                  }
+                }
+                destroyBuilding(currentTargetBuilding.id);
+                unit.state = UnitState.IDLE;
+                unit.target = null;
+              }
+              combatSystem.setAttackCooldown(unit.id, cooldown);
+              break;
+            }
+
+            // --- Chrono Legionnaire: freeze attack on buildings ---
+            if (unit.type === UnitType.CHRONO) {
+              currentTargetBuilding.chronoFreezeProgress = (currentTargetBuilding.chronoFreezeProgress || 0) + deltaTime / 5;
+              if (currentTargetBuilding.chronoFreezeProgress >= 1.0) {
+                currentTargetBuilding.health = 0;
+                gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetBuilding.id, damage: currentTargetBuilding.maxHealth, position: currentTargetBuilding.position });
+                unit.kills++;
+                player.statistics.enemiesDestroyed++;
+                promoteUnit(unit);
+                gameEventBus.emit('combat:explosion', { position: currentTargetBuilding.position, buildingType: currentTargetBuilding.type });
+                const reward = Math.floor(currentTargetBuilding.cost * 0.2);
+                if (reward > 0) player.money += reward;
+                const tilePos = mapManager.worldToTile(currentTargetBuilding.position.x, currentTargetBuilding.position.y);
+                for (let dy = 0; dy < currentTargetBuilding.height; dy++) {
+                  for (let dx = 0; dx < currentTargetBuilding.width; dx++) {
+                    mapManager.setTile(tilePos.x + dx, tilePos.y + dy, TileType.RUBBLE);
+                  }
+                }
+                destroyBuilding(currentTargetBuilding.id);
+                unit.state = UnitState.IDLE;
+                unit.target = null;
+              } else {
+                gameEventBus.emit('combat:hit', { attackerId: unit.id, targetId: currentTargetBuilding.id, damage: 0, position: currentTargetBuilding.position });
+              }
+              combatSystem.setAttackCooldown(unit.id, cooldown);
+              break;
+            }
 
             // Prism Tank focus attack
             if (unit.type === UnitType.PRISM) {
@@ -532,11 +723,44 @@ export class CombatUpdateSystem {
     );
     const enemyUnits = enemyPlayers.flatMap(p => p.units);
 
+    // AEGIS cruiser prioritizes airborne targets
+    if (unit.type === UnitType.AEGIS) {
+      let nearestAirEnemy: Unit | null = null;
+      let nearestAirDist = Infinity;
+      let nearestGroundEnemy: Unit | null = null;
+      let nearestGroundDist = Infinity;
+
+      for (const enemy of enemyUnits) {
+        if (enemy.isSubmerged) continue;
+        const d = distance(unit.position, enemy.position);
+        if (d < unit.vision * GAME_CONFIG.TILE_SIZE) {
+          if (enemy.isAirborne) {
+            if (d < nearestAirDist) {
+              nearestAirDist = d;
+              nearestAirEnemy = enemy;
+            }
+          } else {
+            if (d < nearestGroundDist) {
+              nearestGroundDist = d;
+              nearestGroundEnemy = enemy;
+            }
+          }
+        }
+      }
+
+      const target = nearestAirEnemy || nearestGroundEnemy;
+      if (target && unit.data.canAttack !== false) {
+        unit.state = UnitState.ATTACKING;
+        unit.target = target.id;
+      }
+      return;
+    }
+
     let nearestEnemy: Unit | null = null;
     let nearestDist = Infinity;
     for (const enemy of enemyUnits) {
-      // Skip submerged submarines (invisible)
-      if (enemy.isSubmerged) continue;
+      // Skip submerged submarines (invisible) unless attacker is DOLPHIN
+      if (enemy.isSubmerged && unit.type !== UnitType.DOLPHIN) continue;
       // Skip airborne enemies unless unit has AA capability
       if (enemy.isAirborne && !CAN_TARGET_AIR_TYPES.has(unit.type)) continue;
       const d = distance(unit.position, enemy.position);
@@ -577,24 +801,32 @@ export class CombatUpdateSystem {
       if (!targetUnit) {
         building.attackTarget = null;
       } else {
-        const targetDist = distance(building.position, targetUnit.position);
-        if (targetDist > effectiveRange) {
+        // Dedicated AA buildings: drop ground targets immediately
+        if (DEDICATED_AA_BUILDINGS.has(building.type) && !targetUnit.isAirborne) {
           building.attackTarget = null;
-        } else if (targetDist > effectiveRange * 0.6) {
-          // Re-evaluate: if current target is far (>60% range), check for closer threats
-          let nearestDist = targetDist;
-          let nearestEnemy: Unit | null = null;
-          const canTargetAir = ANTI_AIR_BUILDINGS.has(building.type);
-          for (const enemy of enemyUnits) {
-            if (!canTargetAir && enemy.isAirborne) continue;
-            const d = distance(building.position, enemy.position);
-            if (d <= effectiveRange * 0.6 && d < nearestDist) {
-              nearestDist = d;
-              nearestEnemy = enemy;
+        } else {
+          const targetDist = distance(building.position, targetUnit.position);
+          if (targetDist > effectiveRange) {
+            building.attackTarget = null;
+          } else if (targetDist > effectiveRange * 0.6) {
+            // Re-evaluate: if current target is far (>60% range), check for closer threats
+            let nearestDist = targetDist;
+            let nearestEnemy: Unit | null = null;
+            const canTargetAir = ANTI_AIR_BUILDINGS.has(building.type);
+            const isDedicatedAA = DEDICATED_AA_BUILDINGS.has(building.type);
+            for (const enemy of enemyUnits) {
+              if (!canTargetAir && enemy.isAirborne) continue;
+              // Dedicated AA buildings only consider airborne targets for re-evaluation
+              if (isDedicatedAA && !enemy.isAirborne) continue;
+              const d = distance(building.position, enemy.position);
+              if (d <= effectiveRange * 0.6 && d < nearestDist) {
+                nearestDist = d;
+                nearestEnemy = enemy;
+              }
             }
-          }
-          if (nearestEnemy) {
-            building.attackTarget = nearestEnemy.id;
+            if (nearestEnemy) {
+              building.attackTarget = nearestEnemy.id;
+            }
           }
         }
       }
@@ -602,20 +834,67 @@ export class CombatUpdateSystem {
 
     // Find nearest enemy if no valid target
     if (!building.attackTarget) {
-      let nearestDist = Infinity;
-      let nearestEnemy: Unit | null = null;
       const canTargetAir = ANTI_AIR_BUILDINGS.has(building.type);
-      for (const enemy of enemyUnits) {
-        // Ground-only buildings cannot target airborne units
-        if (!canTargetAir && enemy.isAirborne) continue;
-        const d = distance(building.position, enemy.position);
-        if (d <= effectiveRange && d < nearestDist) {
-          nearestDist = d;
-          nearestEnemy = enemy;
+      const isDedicatedAA = DEDICATED_AA_BUILDINGS.has(building.type);
+
+      // Dedicated AA buildings: prioritize airborne, fall back to ground with reduced effectiveness
+      if (isDedicatedAA) {
+        // First try to find airborne targets
+        let nearestDist = Infinity;
+        let nearestEnemy: Unit | null = null;
+        for (const enemy of enemyUnits) {
+          if (!enemy.isAirborne) continue;
+          const d = distance(building.position, enemy.position);
+          if (d <= effectiveRange && d < nearestDist) {
+            nearestDist = d;
+            nearestEnemy = enemy;
+          }
         }
-      }
-      if (nearestEnemy) {
-        building.attackTarget = nearestEnemy.id;
+        // If no airborne targets, fall back to ground targets
+        if (!nearestEnemy) {
+          for (const enemy of enemyUnits) {
+            if (enemy.isAirborne) continue;
+            const d = distance(building.position, enemy.position);
+            if (d <= effectiveRange && d < nearestDist) {
+              nearestDist = d;
+              nearestEnemy = enemy;
+            }
+          }
+        }
+        if (nearestEnemy) {
+          building.attackTarget = nearestEnemy.id;
+        }
+      } else {
+        // Non-dedicated AA buildings: prioritize airborne targets when available
+        let nearestAirDist = Infinity;
+        let nearestAirEnemy: Unit | null = null;
+        let nearestGroundDist = Infinity;
+        let nearestGroundEnemy: Unit | null = null;
+
+        for (const enemy of enemyUnits) {
+          // Ground-only buildings cannot target airborne units
+          if (!canTargetAir && enemy.isAirborne) continue;
+          const d = distance(building.position, enemy.position);
+          if (d <= effectiveRange) {
+            if (enemy.isAirborne && canTargetAir) {
+              if (d < nearestAirDist) {
+                nearestAirDist = d;
+                nearestAirEnemy = enemy;
+              }
+            } else if (!enemy.isAirborne) {
+              if (d < nearestGroundDist) {
+                nearestGroundDist = d;
+                nearestGroundEnemy = enemy;
+              }
+            }
+          }
+        }
+
+        // Prefer airborne targets over ground targets
+        const nearestEnemy = nearestAirEnemy || nearestGroundEnemy;
+        if (nearestEnemy) {
+          building.attackTarget = nearestEnemy.id;
+        }
       }
     }
 
@@ -643,8 +922,15 @@ export class CombatUpdateSystem {
         if (building.attackCooldown <= 0) {
           const damageType = combatSystem.getDamageTypeForBuilding(building);
           const armorType = combatSystem.getArmorTypeForUnit(targetUnit.type);
+          let effectiveAttack = totalAttack;
+
+          // Dedicated AA buildings deal reduced damage to ground targets
+          if (DEDICATED_AA_BUILDINGS.has(building.type) && !targetUnit.isAirborne) {
+            effectiveAttack = Math.floor(totalAttack * 0.5);
+          }
+
           const finalDamage = combatSystem.calculateDamage(
-            totalAttack,
+            effectiveAttack,
             damageType,
             armorType,
             targetUnit.armor
@@ -700,6 +986,7 @@ function promoteUnit(unit: Unit): void {
     unit.health = Math.round(unit.maxHealth * healthRatio);
     unit.speed *= (1 + GAME_CONFIG.RANK_SPEED_BONUS);
     gameEventBus.emit('unit:promoted', { unitId: unit.id, rank: unit.rank });
+    gameEventBus.emit('notification:success', { message: `单位晋升: ${unit.data.name} -> 老兵` });
   } else if (unit.rank === UnitRank.VETERAN && unit.kills >= GAME_CONFIG.ELITE_KILLS) {
     unit.rank = UnitRank.ELITE;
     const healthRatio = unit.health / unit.maxHealth;
@@ -707,5 +994,6 @@ function promoteUnit(unit: Unit): void {
     unit.health = Math.round(unit.maxHealth * healthRatio);
     unit.speed *= (1 + GAME_CONFIG.RANK_SPEED_BONUS);
     gameEventBus.emit('unit:promoted', { unitId: unit.id, rank: unit.rank });
+    gameEventBus.emit('notification:success', { message: `单位晋升: ${unit.data.name} -> 精英` });
   }
 }

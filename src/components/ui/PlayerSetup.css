@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 100%);
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
   color: #e0e0e0;
   overflow-y: auto;
 }
@@ -15,15 +15,15 @@
 
 .player-setup-header h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 1.5rem;
   color: #ffd700;
   text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
 }
 
 .player-setup-subtitle {
   margin: 8px 0 0;
-  font-size: 14px;
-  color: #888;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .player-setup-content {
@@ -36,23 +36,28 @@
 
 .player-setup-section h3 {
   margin: 0 0 12px;
-  font-size: 16px;
-  color: #aaa;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 1rem;
+  color: rgba(255, 215, 0, 0.8);
+  border-bottom: 1px solid rgba(255, 215, 0, 0.15);
   padding-bottom: 8px;
 }
 
 .player-config-card {
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  border-radius: 6px;
   padding: 12px;
   margin-bottom: 8px;
   position: relative;
+  transition: all 0.2s ease;
 }
 
 .player-config-card.player-self {
   border-left: 3px solid #4169E1;
+}
+
+.player-config-card:hover {
+  border-color: rgba(255, 215, 0, 0.3);
 }
 
 .player-config-card.ai-card {
@@ -68,8 +73,8 @@
 
 .player-config-row label {
   width: 50px;
-  font-size: 13px;
-  color: #999;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
   flex-shrink: 0;
 }
 
@@ -81,7 +86,7 @@
   border-radius: 4px;
   color: #e0e0e0;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .player-config-row select:focus,
@@ -120,12 +125,13 @@
   padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.82rem;
   transition: all 0.2s;
 }
 
 .btn-add-ai:hover:not(:disabled) {
   background: rgba(255, 215, 0, 0.25);
+  transform: translateY(-1px);
 }
 
 .btn-add-ai:disabled {
@@ -142,7 +148,7 @@
 
 .ai-index {
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.9rem;
 }
 
 .btn-remove-ai {
@@ -150,7 +156,7 @@
   border: none;
   color: #ff4444;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 1rem;
   padding: 2px 6px;
   border-radius: 3px;
   transition: all 0.2s;
@@ -162,9 +168,9 @@
 
 .no-ai-message {
   text-align: center;
-  color: #666;
+  color: rgba(255, 255, 255, 0.4);
   padding: 20px;
-  font-size: 14px;
+  font-size: 0.85rem;
 }
 
 .map-selector {
@@ -176,7 +182,7 @@
 .map-option {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border-radius: 5px;
   padding: 10px;
   cursor: pointer;
   text-align: center;
@@ -185,22 +191,24 @@
 
 .map-option:hover {
   background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
 }
 
 .map-option.selected {
   border-color: #ffd700;
   background: rgba(255, 215, 0, 0.1);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.15);
 }
 
 .map-option-name {
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: bold;
   margin-bottom: 4px;
 }
 
 .map-option-size {
-  font-size: 11px;
-  color: #888;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .map-info {
@@ -208,8 +216,8 @@
   padding: 8px;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 4px;
-  font-size: 12px;
-  color: #999;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .map-info p {
@@ -234,12 +242,13 @@
   padding: 10px 24px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 0.9rem;
   transition: all 0.2s;
 }
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
 }
 
 .btn-primary {
@@ -249,7 +258,7 @@
   padding: 10px 32px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 0.9rem;
   font-weight: bold;
   transition: all 0.2s;
 }

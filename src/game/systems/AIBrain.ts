@@ -21,6 +21,62 @@ import { useGameStore, UNIT_UPGRADE_REQUIREMENTS } from '../../store/gameStore';
 import { getUpgradesByFactionGroup } from '../data/upgrades';
 import { GAME_CONFIG } from '../config/GameConfig';
 
+export interface AIDifficultyParams {
+  buildDelay: number;        // Delay between build decisions (seconds)
+  attackWaveSize: number;    // Minimum units before attacking
+  expandTiming: number;      // When to expand (game time in seconds)
+  reactionTime: number;      // Delay before reacting to threats
+  economyFocus: number;      // 0-1, how much AI focuses on economy vs military
+  techRush: boolean;         // Whether AI rushes tech tree
+  superweaponUse: boolean;   // Whether AI uses superweapons
+  maxUnits: number;          // Maximum units AI will build
+}
+
+const DIFFICULTY_PRESETS: Record<string, AIDifficultyParams> = {
+  easy: {
+    buildDelay: 5,
+    attackWaveSize: 8,
+    expandTiming: 300,
+    reactionTime: 3,
+    economyFocus: 0.7,
+    techRush: false,
+    superweaponUse: false,
+    maxUnits: 30,
+  },
+  normal: {
+    buildDelay: 3,
+    attackWaveSize: 5,
+    expandTiming: 180,
+    reactionTime: 1.5,
+    economyFocus: 0.5,
+    techRush: false,
+    superweaponUse: true,
+    maxUnits: 50,
+  },
+  hard: {
+    buildDelay: 1,
+    attackWaveSize: 3,
+    expandTiming: 120,
+    reactionTime: 0.5,
+    economyFocus: 0.3,
+    techRush: true,
+    superweaponUse: true,
+    maxUnits: 80,
+  },
+  brutal: {
+    buildDelay: 0,
+    attackWaveSize: 2,
+    expandTiming: 60,
+    reactionTime: 0,
+    economyFocus: 0.2,
+    techRush: true,
+    superweaponUse: true,
+    maxUnits: 120,
+  },
+};
+
+export type AICombatStrategy = 'rush' | 'turtle' | 'balanced' | 'naval';
+
 export interface AIBrainConfig {
   difficulty: 'easy' | 'normal' | 'hard' | 'brutal';
   aggressionLevel: number;
@@ -32,10 +88,14 @@ export interface AIBrainConfig {
 export class AIBrain {
   private rootBehavior: BehaviorNode;
   private config: AIBrainConfig;
+  private difficultyParams: AIDifficultyParams;
+  private combatStrategy: AICombatStrategy = 'balanced';
   private pendingActions: AIAction[] = [];
   private actionCooldowns: Map<string, number> = new Map();
   private lastScoutTime: number = 0;
   private lastUpdate: number = 0;
+  private lastBuildDecisionTime: number = 0;
+  private strategyEvaluated: boolean = false;
 
   /** Get game time in milliseconds (consistent with gameTime, pauses with game) */
   private getGameTimeMs(): number {
@@ -50,6 +110,8 @@ export class AIBrain {
       economicLevel: config.economicLevel ?? 0.5,
       reactionTime: config.reactionTime ?? 500
     };
+
+    this.difficultyParams = DIFFICULTY_PRESETS[this.config.difficulty] || DIFFICULTY_PRESETS.normal;
 
     this.rootBehavior = this.buildBehaviorTree();
   }
@@ -138,6 +200,46 @@ export class AIBrain {
         createConditionCheck('can_repair_bridge', 'Has Engineers and Destroyed Bridges',
           (ctx) => this.canRepairBridge(ctx)),
         this.createRepairBridgeSequence()
+      ])
+    );
+
+    root.addChild(
+      new SequenceNode('spy_infiltrate', 'Spy Infiltration', [
+        createConditionCheck('has_spy', 'Has Spy Unit',
+          (ctx) => ctx.aiPlayer.units.some(u => u.type === UnitType.SPY)),
+        this.createSpyInfiltrateSequence()
+      ])
+    );
+
+    root.addChild(
+      new SequenceNode('chrono_ambush', 'Chrono Ambush', [
+        createConditionCheck('has_chrono', 'Has Chrono Unit',
+          (ctx) => ctx.aiPlayer.units.some(u => u.type === UnitType.CHRONO)),
+        this.createChronoAmbushSequence()
+      ])
+    );
+
+    root.addChild(
+      new SequenceNode('ivan_sabotage', 'Ivan Sabotage', [
+        createConditionCheck('has_ivan', 'Has Ivan Unit',
+          (ctx) => ctx.aiPlayer.units.some(u => u.type === UnitType.IVAN)),
+        this.createIvanSabotageSequence()
+      ])
+    );
+
+    root.addChild(
+      new SequenceNode('desolator_deploy', 'Desolator Deploy', [
+        createConditionCheck('has_desolator', 'Has Desolator Unit',
+          (ctx) => ctx.aiPlayer.units.some(u => u.type === UnitType.ROCKET && u.special === '辐射部署')),
+        this.createDesolatorDeploySequence()
+      ])
+    );
+
+    root.addChild(
+      new SequenceNode('naval_assault', 'Naval Assault', [
+        createConditionCheck('has_naval', 'Has Naval Units',
+          (ctx) => this.hasNavalUnits(ctx)),
+        this.createNavalAssaultSequence()
       ])
     );
 
@@ -520,6 +622,13 @@ export class AIBrain {
 
     sequence.addChild(
       new ActionNode('build_structures_action', 'Build Structures', (ctx: AIContext): BehaviorNodeStatus => {
+        // Apply buildDelay from difficulty params
+        const gameTimeSec = ctx.currentTime;
+        if (gameTimeSec - this.lastBuildDecisionTime < this.difficultyParams.buildDelay) {
+          return 'failure';
+        }
+        this.lastBuildDecisionTime = gameTimeSec;
+
         const buildings = ctx.aiPlayer.buildings;
         const money = ctx.resources.money;
 
@@ -533,8 +642,12 @@ export class AIBrain {
         // Build priority order
         let targetStructure: string | null = null;
 
+        // Tech rush: prioritize TECH building early if difficulty enables it
+        if (this.difficultyParams.techRush && !hasTech && hasRadar && money >= 2500) {
+          targetStructure = BuildingType.TECH;
+        }
         // 1. Build refinery if none exists and we have money
-        if (!hasRefinery && money >= 2000) {
+        else if (!hasRefinery && money >= 2000) {
           targetStructure = BuildingType.REFINERY;
         }
         // 2. Build more power if less than 3
@@ -671,29 +784,77 @@ export class AIBrain {
 
     sequence.addChild(
       new ActionNode('attack_action', 'Attack', (ctx: AIContext): BehaviorNodeStatus => {
-        const targets = prioritizeTargets(ctx);
         const attackers = ctx.aiPlayer.units.filter(u =>
           u.data?.canAttack && u.state !== 'retreating' && u.health > u.maxHealth * 0.5
         );
 
-        if (targets.length === 0 || attackers.length === 0) return 'failure';
+        if (attackers.length === 0) return 'failure';
 
-        const attackSize = Math.ceil(attackers.length * this.config.aggressionLevel);
+        // Apply combat strategy to determine attack behavior
+        let attackSize: number;
+        switch (this.combatStrategy) {
+          case 'rush':
+            // Rush: send most units aggressively
+            attackSize = Math.ceil(attackers.length * 0.8);
+            break;
+          case 'turtle':
+            // Turtle: send fewer units, keep more for defense
+            attackSize = Math.ceil(attackers.length * 0.3);
+            break;
+          case 'naval':
+            // Naval: only send naval-capable units
+            attackSize = Math.ceil(attackers.length * 0.5);
+            break;
+          case 'balanced':
+          default:
+            attackSize = Math.ceil(attackers.length * this.config.aggressionLevel);
+            break;
+        }
+
         const activeAttackers = attackers.slice(0, attackSize);
 
-        // Distribute attackers across targets, concentrating fire on high-priority targets
-        for (let i = 0; i < activeAttackers.length; i++) {
-          const attacker = activeAttackers[i];
-          // Assign to highest priority target first, then cycle through remaining targets
-          const targetIndex = i < targets.length ? i : 0;
-          const target = targets[targetIndex];
+        // Focus fire: target the most dangerous enemy first
+        const focusTargetId = this.selectFocusFireTarget(ctx);
 
-          this.pendingActions.push({
-            type: 'attack',
-            unitId: attacker.id,
-            targetId: target.id,
-            priority: 6
-          });
+        if (focusTargetId) {
+          // Assign first half of attackers to focus fire on the most dangerous target
+          const focusFireCount = Math.ceil(activeAttackers.length * 0.6);
+          for (let i = 0; i < focusFireCount && i < activeAttackers.length; i++) {
+            this.pendingActions.push({
+              type: 'attack',
+              unitId: activeAttackers[i].id,
+              targetId: focusTargetId,
+              priority: 6
+            });
+          }
+          // Remaining attackers target other enemies
+          const targets = prioritizeTargets(ctx);
+          for (let i = focusFireCount; i < activeAttackers.length; i++) {
+            const targetIndex = (i - focusFireCount) % targets.length;
+            const target = targets[targetIndex];
+            if (target) {
+              this.pendingActions.push({
+                type: 'attack',
+                unitId: activeAttackers[i].id,
+                targetId: target.id,
+                priority: 6
+              });
+            }
+          }
+        } else {
+          // No focus target: distribute across targets normally
+          const targets = prioritizeTargets(ctx);
+          if (targets.length === 0) return 'failure';
+          for (let i = 0; i < activeAttackers.length; i++) {
+            const targetIndex = i < targets.length ? i : 0;
+            const target = targets[targetIndex];
+            this.pendingActions.push({
+              type: 'attack',
+              unitId: activeAttackers[i].id,
+              targetId: target.id,
+              priority: 6
+            });
+          }
         }
 
         return 'success';
@@ -1134,12 +1295,20 @@ export class AIBrain {
   }
 
   public update(context: AIContext): AIAction[] {
-    if (this.getGameTimeMs() - this.lastUpdate < this.config.reactionTime) {
+    // Use difficulty-based reactionTime (in seconds, convert to ms)
+    const reactionTimeMs = this.difficultyParams.reactionTime * 1000;
+    if (this.getGameTimeMs() - this.lastUpdate < reactionTimeMs) {
       return this.pendingActions;
     }
 
     this.lastUpdate = this.getGameTimeMs();
     context.threatLevel = calculateThreatLevel(context);
+
+    // Evaluate combat strategy once based on map and difficulty
+    if (!this.strategyEvaluated) {
+      this.evaluateCombatStrategy(context);
+      this.strategyEvaluated = true;
+    }
 
     this.rootBehavior.execute(context);
 
@@ -1147,9 +1316,11 @@ export class AIBrain {
     const transportActions = this.manageTransports(context);
     this.pendingActions.push(...transportActions);
 
-    // Activate ready superweapons
-    const superweaponActions = this.manageSuperweapons(context);
-    this.pendingActions.push(...superweaponActions);
+    // Activate ready superweapons (respect superweaponUse difficulty param)
+    if (this.difficultyParams.superweaponUse) {
+      const superweaponActions = this.manageSuperweapons(context);
+      this.pendingActions.push(...superweaponActions);
+    }
 
     // Respond to enemy superweapon threats
     const threatActions = this.respondToSuperweaponThreat(context);
@@ -1162,6 +1333,10 @@ export class AIBrain {
     // Sell low-value buildings when low on funds
     const sellActions = this.manageSellBuildings(context);
     this.pendingActions.push(...sellActions);
+
+    // Apply retreat logic: when outnumbered 2:1, retreat to base
+    const retreatActions = this.evaluateRetreat(context);
+    this.pendingActions.push(...retreatActions);
 
     this.cleanupCooldowns();
 
@@ -1183,6 +1358,107 @@ export class AIBrain {
     this.config.defensiveLevel = config.defensiveLevel;
     this.config.economicLevel = config.economicLevel;
     this.config.reactionTime = config.reactionTime;
+    this.difficultyParams = DIFFICULTY_PRESETS[difficulty] || DIFFICULTY_PRESETS.normal;
+  }
+
+  // === Combat Strategy System ===
+
+  private evaluateCombatStrategy(ctx: AIContext): void {
+    // Check if map has water (naval potential)
+    const hasNavalShipyard = ctx.aiPlayer.buildings.some(b => b.type === BuildingType.NAVAL_SHIPYARD);
+    const mapHasWater = hasNavalShipyard || ctx.gameMap.resourceNodes.some(n =>
+      n.position.x > ctx.gameMap.width * 64 * 0.3 && n.position.y > ctx.gameMap.height * 64 * 0.3
+    );
+
+    const difficulty = this.config.difficulty;
+
+    if (mapHasWater && (difficulty === 'hard' || difficulty === 'brutal')) {
+      // On water maps at high difficulty, consider naval strategy
+      this.combatStrategy = Math.random() < 0.3 ? 'naval' : 'balanced';
+    } else if (difficulty === 'easy') {
+      // Easy AI plays defensively
+      this.combatStrategy = 'turtle';
+    } else if (difficulty === 'hard' || difficulty === 'brutal') {
+      // Hard/Brutal: pick from rush, turtle, balanced based on personality
+      const roll = Math.random();
+      if (roll < 0.35) {
+        this.combatStrategy = 'rush';
+      } else if (roll < 0.55) {
+        this.combatStrategy = 'turtle';
+      } else {
+        this.combatStrategy = 'balanced';
+      }
+    } else {
+      this.combatStrategy = 'balanced';
+    }
+  }
+
+  public getCombatStrategy(): AICombatStrategy {
+    return this.combatStrategy;
+  }
+
+  /** Evaluate whether units should retreat based on being outnumbered 2:1 */
+  private evaluateRetreat(ctx: AIContext): AIAction[] {
+    const actions: AIAction[] = [];
+
+    // Find combat units that are currently attacking or idle near enemies
+    const combatUnits = ctx.aiPlayer.units.filter(u =>
+      u.data?.canAttack && (u.state === 'attacking' || u.state === 'idle')
+    );
+
+    if (combatUnits.length === 0) return actions;
+
+    // Group nearby enemy units around each combat unit
+    for (const unit of combatUnits) {
+      const nearbyEnemies = ctx.enemyPlayer.units.filter(e =>
+        getDistance(e.position, unit.position) < 300 && e.data?.canAttack
+      );
+      const nearbyAllies = combatUnits.filter(a =>
+        a.id !== unit.id && getDistance(a.position, unit.position) < 300
+      );
+
+      const allyCount = nearbyAllies.length + 1; // +1 for self
+      const enemyCount = nearbyEnemies.length;
+
+      // Retreat when outnumbered 2:1
+      if (enemyCount >= allyCount * 2) {
+        const baseLocation = ctx.gameMap.friendlyBaseLocation ||
+          ctx.aiPlayer.buildings.find(b => b.type === BuildingType.COMMAND)?.position;
+
+        if (baseLocation) {
+          actions.push({
+            type: 'retreat',
+            unitId: unit.id,
+            position: baseLocation,
+            priority: 9
+          });
+        }
+      }
+    }
+
+    return actions;
+  }
+
+  /** Select the most dangerous enemy target for focus fire */
+  private selectFocusFireTarget(ctx: AIContext): string | null {
+    const enemies = ctx.enemyPlayer.units.filter(u => u.health > 0 && u.data?.canAttack);
+    if (enemies.length === 0) return null;
+
+    // Score each enemy: prioritize low health (easy kill) + high damage (dangerous)
+    let bestTarget: { id: string; score: number } | null = null;
+
+    for (const enemy of enemies) {
+      const healthRatio = enemy.health / enemy.maxHealth;
+      const damageScore = enemy.attack || 1;
+      // Lower health = higher priority (easy kill), higher damage = higher priority (dangerous)
+      const score = (1 - healthRatio) * 5 + damageScore * 0.5;
+
+      if (!bestTarget || score > bestTarget.score) {
+        bestTarget = { id: enemy.id, score };
+      }
+    }
+
+    return bestTarget?.id || null;
   }
 
   private isBaseUnderAttack(context: AIContext): boolean {
@@ -1237,7 +1513,9 @@ export class AIBrain {
     const harvesters = ctx.aiPlayer.units.filter(u => u.data?.canHarvest).length;
     const refineries = ctx.aiPlayer.buildings.filter(b => b.isConstructed && b.type === BuildingType.REFINERY).length;
 
-    return harvesters < refineries * 2 && refineries > 0;
+    // Economy focus influences desired harvester count
+    const desiredPerRefinery = 2 + Math.floor(this.difficultyParams.economyFocus * 2);
+    return harvesters < refineries * desiredPerRefinery && refineries > 0;
   }
 
   private shouldAttack(ctx: AIContext): boolean {
@@ -1245,11 +1523,12 @@ export class AIBrain {
       return false;
     }
 
-    const idleAttackers = ctx.aiPlayer.units.filter(u => 
+    const idleAttackers = ctx.aiPlayer.units.filter(u =>
       u.data?.canAttack && u.state === 'idle'
     );
 
-    return idleAttackers.length >= Math.ceil(5 / this.config.aggressionLevel);
+    // Use difficulty-based attackWaveSize instead of aggressionLevel calculation
+    return idleAttackers.length >= this.difficultyParams.attackWaveSize;
   }
 
   private shouldBuild(ctx: AIContext): boolean {
@@ -1262,6 +1541,12 @@ export class AIBrain {
 
   private selectUnitToProduce(ctx: AIContext): string | null {
     if (ctx.aiPlayer.powerBalance < -20) {
+      return null;
+    }
+
+    // Enforce maxUnits limit from difficulty params
+    const currentUnitCount = ctx.aiPlayer.units.length;
+    if (currentUnitCount >= this.difficultyParams.maxUnits) {
       return null;
     }
 
@@ -1304,34 +1589,42 @@ export class AIBrain {
     const engineerCount = aiPlayer.units.filter(u => u.type === UnitType.ENGINEER).length;
     const needsEngineers = engineerCount < 1;
 
+    // Apply economyFocus from difficulty params: higher economyFocus = more harvesters, fewer combat units
+    const economyFocus = this.difficultyParams.economyFocus;
+
     // Weighted selection
     const weighted: Array<{type: UnitType; weight: number}> = [];
     for (const unitType of availableUnits) {
       let weight = 1;
-      if (unitType === UnitType.MINER) weight = needsMiners ? 5 : 0.5;
+      if (unitType === UnitType.MINER) {
+        // Economy focus increases harvester weight
+        weight = needsMiners ? (3 + economyFocus * 4) : (0.3 + economyFocus * 0.5);
+      }
       if (unitType === UnitType.ROCKET && needsAntiAir) weight = 3;
       if (unitType === UnitType.FLAKINFANTRY && needsAntiAir) weight = 4;
       if (unitType === UnitType.FLAK && needsAntiAir) weight = 4;
       if (unitType === UnitType.ENGINEER) weight = needsEngineers ? 2 : 0.3;
-      if (unitType === UnitType.PRISM || unitType === UnitType.APOCALYPSE) weight = 2;
-      if (unitType === UnitType.TESLA || unitType === UnitType.PHANTOM) weight = 1.5;
-      if (unitType === UnitType.CHRONO) weight = 1.5;
-      if (unitType === UnitType.GUARDIAN) weight = 1.5;
-      if (unitType === UnitType.DESPOT) weight = 1.5;
-      if (unitType === UnitType.APC) weight = 1;
-      if (unitType === UnitType.HELICOPTER) weight = needsAntiAir ? 1.5 : 1;
-      if (unitType === UnitType.BLACKHAWK) weight = 1.5;
-      if (unitType === UnitType.KIROV) weight = 1.2;
-      if (unitType === UnitType.YAK) weight = 1.5;
-      if (unitType === UnitType.DESTROYER) weight = 1.5;
-      if (unitType === UnitType.SUBMARINE) weight = 1.5;
-      if (unitType === UnitType.TRANSPORT_SHIP) weight = 0.8;
-      if (unitType === UnitType.SOLDIER || unitType === UnitType.CONSCRIPT) weight = 1;
-      if (unitType === UnitType.SNIPER) weight = 1.2;
-      if (unitType === UnitType.TANYA || unitType === UnitType.SEAL) weight = 0.8;
+      // Combat units get reduced weight with higher economyFocus
+      const militaryMultiplier = 1 - economyFocus * 0.5;
+      if (unitType === UnitType.PRISM || unitType === UnitType.APOCALYPSE) weight = 2 * militaryMultiplier;
+      if (unitType === UnitType.TESLA || unitType === UnitType.PHANTOM) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.CHRONO) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.GUARDIAN) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.DESPOT) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.APC) weight = 1 * militaryMultiplier;
+      if (unitType === UnitType.HELICOPTER) weight = (needsAntiAir ? 1.5 : 1) * militaryMultiplier;
+      if (unitType === UnitType.BLACKHAWK) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.KIROV) weight = 1.2 * militaryMultiplier;
+      if (unitType === UnitType.YAK) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.DESTROYER) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.SUBMARINE) weight = 1.5 * militaryMultiplier;
+      if (unitType === UnitType.TRANSPORT_SHIP) weight = 0.8 * militaryMultiplier;
+      if (unitType === UnitType.SOLDIER || unitType === UnitType.CONSCRIPT) weight = 1 * militaryMultiplier;
+      if (unitType === UnitType.SNIPER) weight = 1.2 * militaryMultiplier;
+      if (unitType === UnitType.TANYA || unitType === UnitType.SEAL) weight = 0.8 * militaryMultiplier;
       if (unitType === UnitType.SPY) weight = 0.5;
-      if (unitType === UnitType.TERRORIST) weight = 1;
-      if (unitType === UnitType.IVAN) weight = 0.8;
+      if (unitType === UnitType.TERRORIST) weight = 1 * militaryMultiplier;
+      if (unitType === UnitType.IVAN) weight = 0.8 * militaryMultiplier;
       weighted.push({ type: unitType, weight });
     }
 
@@ -1353,6 +1646,7 @@ export class AIBrain {
     const plan: { type: BuildingType; position: { x: number; y: number }; cost: number }[] = [];
     const buildings = ctx.aiPlayer.buildings;
     const money = ctx.resources.money;
+    const gameTimeSec = ctx.currentTime;
 
     const hasBarracks = buildings.some(b => b.type === BuildingType.BARRACKS && b.isConstructed);
     const hasRefinery = buildings.some(b => b.type === BuildingType.REFINERY && b.isConstructed);
@@ -1386,10 +1680,15 @@ export class AIBrain {
       if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
     }
 
-    // 4. Second refinery for better economy
+    // 4. Second refinery for better economy (influenced by economyFocus)
     if (hasRefinery && refineryCount < 2 && money >= 2000) {
-      const pos = this.findBestBuildingPosition(BuildingType.REFINERY, ctx);
-      if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
+      // Higher economyFocus = more likely to build 2nd refinery earlier
+      const shouldBuildSecondRefinery = this.difficultyParams.economyFocus > 0.4 ||
+        gameTimeSec > this.difficultyParams.expandTiming;
+      if (shouldBuildSecondRefinery) {
+        const pos = this.findBestBuildingPosition(BuildingType.REFINERY, ctx);
+        if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
+      }
     }
 
     // 5. War factory
@@ -1404,16 +1703,20 @@ export class AIBrain {
       if (pos) plan.push({ type: BuildingType.RADAR, position: pos, cost: 1500 });
     }
 
-    // 7. Helipad (if faction has one)
+    // 7. Tech center (techRush: build earlier; otherwise normal timing)
+    if (!hasTech && hasRadar && money >= 2500) {
+      // Tech rush: build tech as soon as radar is up
+      // Non-tech-rush: wait until mid game
+      if (this.difficultyParams.techRush || gameTimeSec > 300) {
+        const pos = this.findBestBuildingPosition(BuildingType.TECH, ctx);
+        if (pos) plan.push({ type: BuildingType.TECH, position: pos, cost: 2500 });
+      }
+    }
+
+    // 8. Helipad (if faction has one)
     if (!hasHelipad && hasWarFactory && money >= 1000) {
       const pos = this.findBestBuildingPosition(BuildingType.HELIPAD, ctx);
       if (pos) plan.push({ type: BuildingType.HELIPAD, position: pos, cost: 1000 });
-    }
-
-    // 8. Tech center
-    if (!hasTech && hasRadar && money >= 2500) {
-      const pos = this.findBestBuildingPosition(BuildingType.TECH, ctx);
-      if (pos) plan.push({ type: BuildingType.TECH, position: pos, cost: 2500 });
     }
 
     // 9. Repair facility
@@ -1422,14 +1725,15 @@ export class AIBrain {
       if (pos) plan.push({ type: BuildingType.REPAIR, position: pos, cost: 1500 });
     }
 
-    // 10. Naval shipyard (late game)
-    if (!hasNavalShipyard && hasRadar && money >= 2000) {
+    // 10. Naval shipyard (late game, based on expandTiming)
+    if (!hasNavalShipyard && hasRadar && money >= 2000 && gameTimeSec > this.difficultyParams.expandTiming) {
       const pos = this.findBestBuildingPosition(BuildingType.NAVAL_SHIPYARD, ctx);
       if (pos) plan.push({ type: BuildingType.NAVAL_SHIPYARD, position: pos, cost: 1500 });
     }
 
-    // 11. Defense buildings (when base is established)
-    if (defenseCount < 3 && hasBarracks && money >= 600) {
+    // 11. Defense buildings (turtle strategy builds more defenses)
+    const desiredDefenseCount = this.combatStrategy === 'turtle' ? 5 : 3;
+    if (defenseCount < desiredDefenseCount && hasBarracks && money >= 600) {
       const defenseType = this.selectDefenseBuilding(ctx);
       if (defenseType) {
         const pos = this.findBestBuildingPosition(defenseType, ctx);
@@ -1443,8 +1747,9 @@ export class AIBrain {
       if (pos) plan.push({ type: BuildingType.POWER, position: pos, cost: 800 });
     }
 
-    // 13. Third refinery for late game economy
-    if (refineryCount >= 2 && refineryCount < 3 && hasWarFactory && money >= 2000) {
+    // 13. Third refinery for late game economy (based on expandTiming)
+    if (refineryCount >= 2 && refineryCount < 3 && hasWarFactory && money >= 2000 &&
+        gameTimeSec > this.difficultyParams.expandTiming) {
       const pos = this.findBestBuildingPosition(BuildingType.REFINERY, ctx);
       if (pos) plan.push({ type: BuildingType.REFINERY, position: pos, cost: 2000 });
     }
@@ -1709,6 +2014,9 @@ export class AIBrain {
   }
 
   private canBuildSuperweapon(ctx: AIContext): boolean {
+    // Difficulty check: some difficulties don't use superweapons
+    if (!this.difficultyParams.superweaponUse) return false;
+
     const hasTech = ctx.aiPlayer.buildings.some(b => b.type === BuildingType.TECH && b.isConstructed);
     if (!hasTech) return false;
 
@@ -2055,7 +2363,7 @@ export class AIBrain {
 
         // Only chrono shift if far enough away to make it worthwhile
         if (dist > 400) {
-          const chronoRange = (chrono.data?.attackRange || 6) * GAME_CONFIG.TILE_SIZE;
+          const chronoRange = (chrono.attackRange || 6) * GAME_CONFIG.TILE_SIZE;
           const shiftPos = {
             x: Math.max(0, Math.min(ctx.gameMap.width * GAME_CONFIG.TILE_SIZE,
               targetPos.x + (dx / dist) * chronoRange)),
@@ -2195,6 +2503,283 @@ export class AIBrain {
             buildingId: bridge.id,
             priority: 5
           });
+        }
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  // === Spy Infiltration System ===
+
+  private createSpyInfiltrateSequence(): BehaviorNode {
+    return new ActionNode('spy_infiltrate', 'Spy Infiltration', (ctx) => {
+      const actions: AIAction[] = [];
+      const spies = ctx.aiPlayer.units.filter(u =>
+        u.type === UnitType.SPY && (u.state === 'idle' || u.state === 'defending')
+      );
+
+      if (spies.length === 0) return 'failure';
+
+      // Priority: REFINERY > POWER > TECH > WARFACTORY > BARRACKS
+      const INFILTRATE_PRIORITY: Record<string, number> = {
+        [BuildingType.REFINERY]: 5,
+        [BuildingType.POWER]: 4,
+        [BuildingType.TECH]: 3,
+        [BuildingType.WARFACTORY]: 2,
+        [BuildingType.BARRACKS]: 1,
+      };
+
+      const enemyBuildings = ctx.enemyPlayer.buildings.filter(b => b.isConstructed);
+      const targetBuildings = enemyBuildings
+        .filter(b => INFILTRATE_PRIORITY[b.type] !== undefined)
+        .sort((a, b) => (INFILTRATE_PRIORITY[b.type] || 0) - (INFILTRATE_PRIORITY[a.type] || 0));
+
+      if (targetBuildings.length === 0) return 'failure';
+
+      const target = targetBuildings[0];
+
+      for (const spy of spies) {
+        actions.push({
+          type: 'spyInfiltrate' as AIActionType,
+          unitId: spy.id,
+          targetId: target.id,
+          position: target.position,
+          priority: 6
+        });
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  // === Chrono Ambush System ===
+
+  private createChronoAmbushSequence(): BehaviorNode {
+    return new ActionNode('chrono_ambush', 'Chrono Ambush', (ctx) => {
+      const actions: AIAction[] = [];
+      const chronoUnits = ctx.aiPlayer.units.filter(u =>
+        u.type === UnitType.CHRONO && !u.isChronoShifting && !u.isChronoCooldown &&
+        (u.state === 'idle' || u.state === 'defending')
+      );
+
+      if (chronoUnits.length === 0) return 'failure';
+
+      // Cooldown: don't chrono ambush too frequently
+      const cooldownKey = 'chrono_ambush';
+      if (this.actionCooldowns.has(cooldownKey)) return 'failure';
+
+      // Find enemy unit clusters
+      const enemyUnits = ctx.enemyPlayer.units.filter(u => u.health > 0);
+      if (enemyUnits.length === 0) return 'failure';
+
+      // Priority targets: harvesters, artillery units
+      const PRIORITY_TARGETS = new Set([UnitType.MINER, UnitType.WAR_MINER, UnitType.SLAVE_MINER, UnitType.KIROV, UnitType.DREADNOUGHT]);
+
+      // Find best cluster to ambush
+      let bestTarget: { position: Vector2; score: number } | null = null;
+
+      for (const enemy of enemyUnits) {
+        const nearbyEnemies = enemyUnits.filter(e =>
+          getDistance(e.position, enemy.position) < 200
+        );
+
+        let score = nearbyEnemies.length;
+        // Bonus for priority targets in cluster
+        if (PRIORITY_TARGETS.has(enemy.type as UnitType)) {
+          score += 5;
+        }
+
+        if (!bestTarget || score > bestTarget.score) {
+          bestTarget = { position: enemy.position, score };
+        }
+      }
+
+      if (!bestTarget) return 'failure';
+
+      for (const chrono of chronoUnits.slice(0, 1)) { // Only one chrono shift per cycle
+        // Teleport behind enemy lines
+        const dx = chrono.position.x - bestTarget.position.x;
+        const dy = chrono.position.y - bestTarget.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Only chrono shift if far enough to be worthwhile
+        if (dist > 300) {
+          const chronoRange = (chrono.range || 6) * GAME_CONFIG.TILE_SIZE;
+          const shiftPos = {
+            x: Math.max(0, Math.min(ctx.gameMap.width * GAME_CONFIG.TILE_SIZE,
+              bestTarget.position.x + (dx / dist) * chronoRange)),
+            y: Math.max(0, Math.min(ctx.gameMap.height * GAME_CONFIG.TILE_SIZE,
+              bestTarget.position.y + (dy / dist) * chronoRange)),
+          };
+
+          actions.push({
+            type: 'chronoAmbush' as AIActionType,
+            unitId: chrono.id,
+            position: shiftPos,
+            priority: 7
+          });
+          this.actionCooldowns.set(cooldownKey, this.getGameTimeMs() + 10000);
+        }
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  // === Ivan Sabotage System ===
+
+  private createIvanSabotageSequence(): BehaviorNode {
+    return new ActionNode('ivan_sabotage', 'Ivan Sabotage', (ctx) => {
+      const actions: AIAction[] = [];
+      const ivanUnits = ctx.aiPlayer.units.filter(u =>
+        u.type === UnitType.IVAN && (u.state === 'idle' || u.state === 'defending')
+      );
+
+      if (ivanUnits.length === 0) return 'failure';
+
+      // Find high-value enemy buildings or unit clusters
+      const enemyBuildings = ctx.enemyPlayer.buildings.filter(b => b.isConstructed);
+      const enemyUnits = ctx.enemyPlayer.units.filter(u => u.health > 0);
+
+      // Priority: buildings with low health, or clusters of units
+      let bestTarget: { id: string; position: Vector2; score: number } | null = null;
+
+      // Check buildings
+      for (const building of enemyBuildings) {
+        const healthRatio = building.health / building.maxHealth;
+        const score = 10 - healthRatio * 5; // Lower health = higher priority
+        if (!bestTarget || score > bestTarget.score) {
+          bestTarget = { id: building.id, position: building.position, score };
+        }
+      }
+
+      // Check unit clusters
+      for (const unit of enemyUnits) {
+        const nearby = enemyUnits.filter(e => getDistance(e.position, unit.position) < 100);
+        const score = nearby.length * 2;
+        if (score > (bestTarget?.score ?? 0)) {
+          bestTarget = { id: unit.id, position: unit.position, score };
+        }
+      }
+
+      if (!bestTarget) return 'failure';
+
+      for (const ivan of ivanUnits) {
+        actions.push({
+          type: 'ivanSabotage' as AIActionType,
+          unitId: ivan.id,
+          targetId: bestTarget.id,
+          position: bestTarget.position,
+          priority: 6
+        });
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  // === Desolator Deploy System ===
+
+  private createDesolatorDeploySequence(): BehaviorNode {
+    return new ActionNode('desolator_deploy', 'Desolator Deploy Radiation', (ctx) => {
+      const actions: AIAction[] = [];
+      const desolators = ctx.aiPlayer.units.filter(u =>
+        u.type === UnitType.ROCKET && u.special === '辐射部署' && !u.isRadiationDeployed
+      );
+
+      if (desolators.length === 0) return 'failure';
+
+      // Find enemy infantry clusters near desolators
+      for (const desolator of desolators) {
+        const nearbyEnemyInfantry = ctx.enemyPlayer.units.filter(e =>
+          e.isInfantry && getDistance(e.position, desolator.position) < 200
+        );
+
+        if (nearbyEnemyInfantry.length >= 3) {
+          actions.push({
+            type: 'desolatorDeploy' as AIActionType,
+            unitId: desolator.id,
+            position: { ...desolator.position },
+            priority: 7
+          });
+        }
+      }
+
+      this.pendingActions.push(...actions);
+      return actions.length > 0 ? 'success' : 'failure';
+    });
+  }
+
+  // === Naval Assault System ===
+
+  private hasNavalUnits(ctx: AIContext): boolean {
+    const NAVAL_TYPES = new Set([UnitType.DESTROYER, UnitType.SUBMARINE, UnitType.TRANSPORT_SHIP, UnitType.AEGIS, UnitType.DOLPHIN, UnitType.SQUID, UnitType.DREADNOUGHT, UnitType.CARRIER, UnitType.BOOMER]);
+    return ctx.aiPlayer.units.some(u => NAVAL_TYPES.has(u.type as UnitType));
+  }
+
+  private createNavalAssaultSequence(): BehaviorNode {
+    return new ActionNode('naval_assault', 'Naval Assault', (ctx) => {
+      const actions: AIAction[] = [];
+      const NAVAL_TYPES = new Set([UnitType.DESTROYER, UnitType.SUBMARINE, UnitType.TRANSPORT_SHIP, UnitType.AEGIS, UnitType.DOLPHIN, UnitType.SQUID, UnitType.DREADNOUGHT, UnitType.CARRIER, UnitType.BOOMER]);
+
+      const navalUnits = ctx.aiPlayer.units.filter(u =>
+        NAVAL_TYPES.has(u.type as UnitType) && (u.state === 'idle' || u.state === 'defending')
+      );
+
+      if (navalUnits.length === 0) return 'failure';
+
+      // Find enemy coastal buildings or units
+      const enemyBuildings = ctx.enemyPlayer.buildings.filter(b => b.isConstructed);
+      const enemyUnits = ctx.enemyPlayer.units.filter(u => u.health > 0);
+
+      // Submarines prioritize enemy naval units
+      const enemyNavalUnits = enemyUnits.filter(u => NAVAL_TYPES.has(u.type as UnitType));
+
+      // Dolphins prioritize enemy submarines
+      const enemySubmarines = enemyUnits.filter(u => u.type === UnitType.SUBMARINE || u.type === UnitType.BOOMER);
+
+      for (const unit of navalUnits) {
+        if (unit.type === UnitType.SUBMARINE && enemyNavalUnits.length > 0) {
+          // Submarines target enemy naval units
+          const nearest = enemyNavalUnits.sort((a, b) =>
+            getDistance(a.position, unit.position) - getDistance(b.position, unit.position)
+          )[0];
+          actions.push({
+            type: 'navalAssault' as AIActionType,
+            unitId: unit.id,
+            targetId: nearest.id,
+            position: nearest.position,
+            priority: 6
+          });
+        } else if (unit.type === UnitType.DOLPHIN && enemySubmarines.length > 0) {
+          // Dolphins target enemy submarines
+          const nearest = enemySubmarines.sort((a, b) =>
+            getDistance(a.position, unit.position) - getDistance(b.position, unit.position)
+          )[0];
+          actions.push({
+            type: 'navalAssault' as AIActionType,
+            unitId: unit.id,
+            targetId: nearest.id,
+            position: nearest.position,
+            priority: 6
+          });
+        } else {
+          // Other naval units target enemy coastal buildings or nearest enemy
+          const coastalTarget = enemyBuildings[0] || enemyUnits[0];
+          if (coastalTarget) {
+            actions.push({
+              type: 'navalAssault' as AIActionType,
+              unitId: unit.id,
+              targetId: coastalTarget.id,
+              position: coastalTarget.position,
+              priority: 5
+            });
+          }
         }
       }
 

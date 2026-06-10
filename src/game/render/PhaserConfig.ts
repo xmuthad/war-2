@@ -161,6 +161,10 @@ export const UNIT_SPRITE_KEYS: SpriteMapping = {
   [createUnitSpriteKey(Faction.USA, UnitType.MIRAGE)]: 'usa_mirage',
   [createUnitSpriteKey(Faction.USA, UnitType.AEGIS)]: 'usa_aegis',
   [createUnitSpriteKey(Faction.USA, UnitType.ATTACK_DOG)]: 'usa_attack_dog',
+  [createUnitSpriteKey(Faction.USA, UnitType.DOLPHIN)]: 'allied_dolphin',
+  [createUnitSpriteKey(Faction.USA, UnitType.CARRIER)]: 'allied_carrier',
+  [createUnitSpriteKey(Faction.USA, UnitType.CHRONO_MINER)]: 'allied_chrono_miner',
+  [createUnitSpriteKey(Faction.USA, UnitType.HARRIER)]: 'allied_harrier',
 
   [createUnitSpriteKey(Faction.BRITAIN, UnitType.SOLDIER)]: 'britain_soldier',
   [createUnitSpriteKey(Faction.BRITAIN, UnitType.SNIPER)]: 'britain_sniper',
@@ -209,6 +213,8 @@ export const UNIT_SPRITE_KEYS: SpriteMapping = {
   [createUnitSpriteKey(Faction.SOVIET, UnitType.GATTLING_TANK)]: 'soviet_gattling_tank',
   [createUnitSpriteKey(Faction.SOVIET, UnitType.SLAVE_MINER)]: 'soviet_slave_miner',
   [createUnitSpriteKey(Faction.SOVIET, UnitType.ATTACK_DOG)]: 'soviet_attack_dog',
+  [createUnitSpriteKey(Faction.SOVIET, UnitType.SQUID)]: 'soviet_squid',
+  [createUnitSpriteKey(Faction.SOVIET, UnitType.V3_ROCKET)]: 'soviet_v3_rocket',
 
   [createUnitSpriteKey(Faction.CUBA, UnitType.SOLDIER)]: 'cuba_soldier',
   [createUnitSpriteKey(Faction.CUBA, UnitType.TERRORIST)]: 'cuba_terrorist',
@@ -255,6 +261,10 @@ export const BUILDING_SPRITE_KEYS: SpriteMapping = {
   [createBuildingSpriteKey(Faction.USA, BuildingType.AIRFIELD)]: 'usa_airfield',
   [createBuildingSpriteKey(Faction.USA, BuildingType.CHRONOSPHERE)]: 'usa_chronosphere',
   [createBuildingSpriteKey(Faction.USA, BuildingType.NAVAL_SHIPYARD)]: 'usa_naval_shipyard',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.GAP_GENERATOR)]: 'allied_gap_generator',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.SPY_SATELLITE)]: 'allied_spy_satellite',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.ORE_PURIFIER)]: 'allied_ore_purifier',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.GRAND_CANNON)]: 'allied_grand_cannon',
 
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.COMMAND)]: 'soviet_command',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.BARRACKS)]: 'soviet_barracks',
@@ -274,12 +284,14 @@ export const BUILDING_SPRITE_KEYS: SpriteMapping = {
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.NUCLEAR_SILO)]: 'soviet_nuclear_silo',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.IRON_CURTAIN)]: 'soviet_iron_curtain',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.NAVAL_SHIPYARD)]: 'soviet_naval_shipyard',
+  [createBuildingSpriteKey(Faction.SOVIET, BuildingType.NUCLEAR_REACTOR)]: 'soviet_nuclear_reactor',
+  [createBuildingSpriteKey(Faction.SOVIET, BuildingType.FLAK_CANNON)]: 'soviet_flak_cannon',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.SENTRY_GUN)]: 'soviet_turret',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.BATTLE_BUNKER)]: 'soviet_defense',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.CLONING_VATS)]: 'soviet_tech',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.INDUSTRIAL_PLANT)]: 'soviet_warfactory',
   [createBuildingSpriteKey(Faction.SOVIET, BuildingType.PSYCHIC_SENSOR)]: 'soviet_radar',
-  [createBuildingSpriteKey(Faction.USA, BuildingType.PATRIOT)]: 'usa_turret',
+  [createBuildingSpriteKey(Faction.USA, BuildingType.PATRIOT)]: 'allied_patriot',
   [createBuildingSpriteKey(Faction.NEUTRAL, BuildingType.CIVILIAN_BUILDING)]: 'neutral_civilian_building',
   [createBuildingSpriteKey(Faction.NEUTRAL, BuildingType.BIOLAB)]: 'neutral_civilian_building',
   [createBuildingSpriteKey(Faction.NEUTRAL, BuildingType.MACHINE_SHOP)]: 'neutral_civilian_building',
@@ -490,7 +502,11 @@ export const SPRITE_PATHS = {
     usa_grizzly: '/assets/sprites/units/allied_grizzly.png',
     usa_mirage: '/assets/sprites/units/allied_mirage.png',
     usa_aegis: '/assets/sprites/units/allied_aegis.png',
-    usa_attack_dog: '/assets/sprites/units/allied_attack_dog.png',
+    usa_attack_dog: '/assets/sprites/units/soviet_attack_dog.png',
+    allied_dolphin: '/assets/sprites/units/allied_dolphin.png',
+    allied_carrier: '/assets/sprites/units/allied_carrier.png',
+    allied_chrono_miner: '/assets/sprites/units/allied_chrono_miner.png',
+    allied_harrier: '/assets/sprites/units/allied_harrier.png',
 
     britain_soldier: '/assets/sprites/units/allied_soldier.png',
     britain_sniper: '/assets/sprites/units/allied_sniper.png',
@@ -539,6 +555,8 @@ export const SPRITE_PATHS = {
     soviet_gattling_tank: '/assets/sprites/units/soviet_gattling_tank.png',
     soviet_slave_miner: '/assets/sprites/units/soviet_slave_miner.png',
     soviet_attack_dog: '/assets/sprites/units/soviet_attack_dog.png',
+    soviet_squid: '/assets/sprites/units/soviet_squid.png',
+    soviet_v3_rocket: '/assets/sprites/units/soviet_v3_rocket.png',
 
     cuba_soldier: '/assets/sprites/units/soviet_soldier.png',
     cuba_terrorist: '/assets/sprites/units/soviet_soldier.png',
@@ -605,7 +623,7 @@ export const SPRITE_PATHS = {
     soviet_naval_shipyard: '/assets/sprites/buildings/soviet_naval_shipyard.png',
 
     // New building sprites
-    soviet_patriot: '/assets/sprites/buildings/soviet_patriot.png',
+    allied_patriot: '/assets/sprites/buildings/allied_patriot.png',
     soviet_sentry_gun: '/assets/sprites/buildings/soviet_sentry_gun.png',
     soviet_battle_bunker: '/assets/sprites/buildings/soviet_battle_bunker.png',
     soviet_cloning_vats: '/assets/sprites/buildings/soviet_cloning_vats.png',
@@ -616,6 +634,12 @@ export const SPRITE_PATHS = {
     neutral_machine_shop: '/assets/sprites/buildings/neutral_machine_shop.png',
     neutral_bridge: '/assets/sprites/buildings/neutral_bridge.png',
     neutral_bridge_destroyed: '/assets/sprites/buildings/neutral_bridge_destroyed.png',
+    allied_gap_generator: '/assets/sprites/buildings/allied_gap_generator.png',
+    soviet_nuclear_reactor: '/assets/sprites/buildings/soviet_nuclear_reactor.png',
+    soviet_flak_cannon: '/assets/sprites/buildings/soviet_flak_cannon.png',
+    allied_spy_satellite: '/assets/sprites/buildings/allied_spy_satellite.png',
+    allied_ore_purifier: '/assets/sprites/buildings/allied_ore_purifier.png',
+    allied_grand_cannon: '/assets/sprites/buildings/allied_grand_cannon.png',
   }
 };
 

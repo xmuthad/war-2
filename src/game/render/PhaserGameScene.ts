@@ -23,6 +23,8 @@ import { gameEventBus } from '../systems/GameEventBus';
 import { GameUIController } from '../ui/GameUIController';
 import { captureSystem } from '../systems/CaptureSystem';
 import { gameEventBridge } from '../systems/GameEventBridge';
+import { radiationSystem } from '../systems/RadiationSystem';
+import { ivanBombSystem } from '../systems/IvanBombSystem';
 import { isAlliedFaction } from '../config/FactionTheme';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { SystemManager } from '../systems/SystemManager';
@@ -138,6 +140,13 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
   private garrisonIndicators: Map<string, Phaser.GameObjects.Container> = new Map();
   private bridgeDestroyedOverlays: Map<string, Phaser.GameObjects.Container> = new Map();
   private psychicSensorRings: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private radiationZoneGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private radiationZoneLabels: Map<string, Phaser.GameObjects.Text> = new Map();
+  private ivanBombGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private ivanBombLabels: Map<string, Phaser.GameObjects.Text> = new Map();
+  private submergedSubRipples: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private gapGeneratorOverlays: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private chronoFreezeOverlays: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private movePreviewLine: Phaser.GameObjects.Graphics | null = null;
   private isRightMouseDown: boolean = false;
   private terrainLayer!: Phaser.GameObjects.Container;
@@ -626,6 +635,11 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.soundManager?.update(time);
     this.updateFogOfWar(time);
     this.updatePsychicSensorRings();
+    this.updateRadiationZoneVisuals();
+    this.updateIvanBombVisuals();
+    this.updateSubmergedSubVisuals();
+    this.updateGapGeneratorVisuals();
+    this.updateChronoFreezeVisuals();
   }
 
   private renderPlacementPreview(): void {
@@ -1239,6 +1253,13 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.garrisonIndicators.forEach(indicator => indicator.destroy());
     this.bridgeDestroyedOverlays.forEach(overlay => overlay.destroy());
     this.psychicSensorRings.forEach(ring => ring.destroy());
+    this.radiationZoneGraphics.forEach(gfx => gfx.destroy());
+    this.radiationZoneLabels.forEach(label => label.destroy());
+    this.ivanBombGraphics.forEach(gfx => gfx.destroy());
+    this.ivanBombLabels.forEach(label => label.destroy());
+    this.submergedSubRipples.forEach(ripple => ripple.destroy());
+    this.gapGeneratorOverlays.forEach(overlay => overlay.destroy());
+    this.chronoFreezeOverlays.forEach(overlay => overlay.destroy());
 
     this.unitSprites.clear();
     this.buildingSprites.clear();
@@ -1249,6 +1270,13 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     this.garrisonIndicators.clear();
     this.bridgeDestroyedOverlays.clear();
     this.psychicSensorRings.clear();
+    this.radiationZoneGraphics.clear();
+    this.radiationZoneLabels.clear();
+    this.ivanBombGraphics.clear();
+    this.ivanBombLabels.clear();
+    this.submergedSubRipples.clear();
+    this.gapGeneratorOverlays.clear();
+    this.chronoFreezeOverlays.clear();
     this.unitStates.clear();
     this.buildingStates.clear();
 
@@ -1439,6 +1467,360 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
       const pulse2 = 0.08 + 0.06 * Math.sin(this.time.now / 800 + Math.PI);
       ring.lineStyle(1, 0xcc44ff, pulse2);
       ring.strokeCircle(0, 0, detectionRadius * 0.7);
+    });
+  }
+
+  // --- Radiation Zone Visual ---
+  private updateRadiationZoneVisuals(): void {
+    const zones = radiationSystem.getZones();
+    const activeZoneIds = new Set(zones.map(z => z.id));
+
+    // Remove graphics for expired zones
+    this.radiationZoneGraphics.forEach((gfx, id) => {
+      if (!activeZoneIds.has(id)) {
+        gfx.destroy();
+        this.radiationZoneGraphics.delete(id);
+      }
+    });
+    this.radiationZoneLabels.forEach((label, id) => {
+      if (!activeZoneIds.has(id)) {
+        label.destroy();
+        this.radiationZoneLabels.delete(id);
+      }
+    });
+
+    for (const zone of zones) {
+      const { x: renderX, y: renderY } = logicalToRender(zone.position.x, zone.position.y);
+      const renderRadius = zone.radius * (SPRITE_CONFIG.tileSize / GAME_CONFIG.TILE_SIZE);
+
+      let gfx = this.radiationZoneGraphics.get(zone.id);
+      if (!gfx) {
+        gfx = this.add.graphics();
+        gfx.setDepth(RENDER_CONFIG.unitDepthBase - 2);
+        this.radiationZoneGraphics.set(zone.id, gfx);
+      }
+
+      let label = this.radiationZoneLabels.get(zone.id);
+      if (!label) {
+        label = this.add.text(renderX, renderY, '☢', {
+          fontSize: '16px',
+          color: '#00ff00',
+          fontFamily: 'Arial',
+          stroke: '#003300',
+          strokeThickness: 2,
+        });
+        label.setOrigin(0.5, 0.5);
+        label.setDepth(RENDER_CONFIG.unitDepthBase - 1);
+        this.radiationZoneLabels.set(zone.id, label);
+      }
+
+      gfx.clear();
+      // Pulsing green circle
+      const pulse = 0.1 + 0.2 * (0.5 + 0.5 * Math.sin(this.time.now / 500));
+      gfx.fillStyle(0x00ff00, pulse);
+      gfx.fillCircle(renderX, renderY, renderRadius);
+      gfx.lineStyle(2, 0x00ff00, pulse + 0.1);
+      gfx.strokeCircle(renderX, renderY, renderRadius);
+
+      label.setPosition(renderX, renderY);
+      label.setAlpha(pulse + 0.3);
+    }
+  }
+
+  // --- Ivan Bomb Indicator ---
+  private updateIvanBombVisuals(): void {
+    const bombs = ivanBombSystem.getBombs();
+    const activeBombIds = new Set(bombs.map(b => b.id));
+
+    // Remove graphics for detonated bombs
+    this.ivanBombGraphics.forEach((gfx, id) => {
+      if (!activeBombIds.has(id)) {
+        gfx.destroy();
+        this.ivanBombGraphics.delete(id);
+      }
+    });
+    this.ivanBombLabels.forEach((label, id) => {
+      if (!activeBombIds.has(id)) {
+        label.destroy();
+        this.ivanBombLabels.delete(id);
+      }
+    });
+
+    for (const bomb of bombs) {
+      const { x: renderX, y: renderY } = logicalToRender(bomb.targetPosition.x, bomb.targetPosition.y);
+
+      let gfx = this.ivanBombGraphics.get(bomb.id);
+      if (!gfx) {
+        gfx = this.add.graphics();
+        gfx.setDepth(RENDER_CONFIG.healthBarDepth + 1);
+        this.ivanBombGraphics.set(bomb.id, gfx);
+      }
+
+      let label = this.ivanBombLabels.get(bomb.id);
+      if (!label) {
+        label = this.add.text(renderX, renderY - 20, '', {
+          fontSize: '12px',
+          color: '#ff4444',
+          fontStyle: 'bold',
+          fontFamily: 'Arial',
+          stroke: '#000000',
+          strokeThickness: 2,
+        });
+        label.setOrigin(0.5, 0.5);
+        label.setDepth(RENDER_CONFIG.healthBarDepth + 2);
+        this.ivanBombLabels.set(bomb.id, label);
+      }
+
+      gfx.clear();
+      // Red flashing circle - pulses faster as timer approaches 0
+      const speed = Math.max(100, bomb.timer * 150);
+      const flash = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(this.time.now / speed));
+      gfx.fillStyle(0xff0000, flash * 0.4);
+      gfx.fillCircle(renderX, renderY, 18);
+      gfx.lineStyle(2, 0xff0000, flash);
+      gfx.strokeCircle(renderX, renderY, 18);
+
+      // Countdown timer text
+      const seconds = Math.max(0, Math.ceil(bomb.timer));
+      label.setText(`${seconds}s`);
+      label.setPosition(renderX, renderY - 28);
+      label.setAlpha(flash);
+    }
+  }
+
+  // --- Submarine Submerged Visual ---
+  private updateSubmergedSubVisuals(): void {
+    const store = useGameStore.getState();
+    const currentPlayer = store.currentPlayer;
+    if (!currentPlayer) return;
+
+    const allPlayers = [currentPlayer, ...store.aiPlayers].filter(Boolean) as Player[];
+
+    // Track which subs are currently submerged for ripple cleanup
+    const activeSubIds = new Set<string>();
+
+    for (const player of allPlayers) {
+      const isOwner = player.id === currentPlayer.id;
+
+      for (const unit of player.units) {
+        if (unit.isSubmerged) {
+          activeSubIds.add(unit.id);
+
+          const sprite = this.unitSprites.get(unit.id);
+          if (sprite) {
+            if (isOwner) {
+              // Semi-transparent for owning player
+              sprite.setAlpha(0.4);
+            }
+          }
+
+          // Water ripple effect around submerged sub
+          let ripple = this.submergedSubRipples.get(unit.id);
+          if (!ripple) {
+            ripple = this.add.graphics();
+            ripple.setDepth(RENDER_CONFIG.unitDepthBase - 1);
+            this.submergedSubRipples.set(unit.id, ripple);
+          }
+
+          const { x: renderX, y: renderY } = logicalToRender(unit.position.x, unit.position.y);
+          ripple.clear();
+          const ripplePhase = this.time.now / 600;
+          const rippleAlpha = 0.15 + 0.1 * Math.sin(ripplePhase);
+          ripple.lineStyle(1, 0x88bbff, rippleAlpha);
+          ripple.strokeCircle(renderX, renderY, 12 + 3 * Math.sin(ripplePhase));
+          ripple.lineStyle(1, 0x88bbff, rippleAlpha * 0.6);
+          ripple.strokeCircle(renderX, renderY, 18 + 2 * Math.sin(ripplePhase + 1));
+        } else {
+          // Not submerged - restore alpha if it was previously submerged
+          const ripple = this.submergedSubRipples.get(unit.id);
+          if (ripple) {
+            ripple.destroy();
+            this.submergedSubRipples.delete(unit.id);
+          }
+          // Only restore alpha for own units (enemy visibility handled by fog of war)
+          if (player.id === currentPlayer.id) {
+            const sprite = this.unitSprites.get(unit.id);
+            if (sprite) {
+              sprite.setAlpha(1.0);
+            }
+          }
+        }
+      }
+    }
+
+    // Clean up ripples for units no longer submerged
+    this.submergedSubRipples.forEach((ripple, id) => {
+      if (!activeSubIds.has(id)) {
+        ripple.destroy();
+        this.submergedSubRipples.delete(id);
+      }
+    });
+  }
+
+  // --- Gap Generator Fog Effect ---
+  private updateGapGeneratorVisuals(): void {
+    const store = useGameStore.getState();
+    const currentPlayer = store.currentPlayer;
+    if (!currentPlayer) return;
+
+    const allPlayers = [currentPlayer, ...store.aiPlayers].filter(Boolean) as Player[];
+    const activeGapIds = new Set<string>();
+
+    // Find enemy gap generators
+    for (const player of allPlayers) {
+      if (player.id === currentPlayer.id) continue;
+      if (currentPlayer.teamId !== undefined && player.teamId === currentPlayer.teamId) continue;
+
+      for (const building of player.buildings) {
+        if (building.type === BuildingType.GAP_GENERATOR && building.isConstructed && building.isPowered) {
+          activeGapIds.add(building.id);
+
+          let overlay = this.gapGeneratorOverlays.get(building.id);
+          if (!overlay) {
+            overlay = this.add.graphics();
+            overlay.setDepth(RENDER_CONFIG.unitDepthBase - 3);
+            this.gapGeneratorOverlays.set(building.id, overlay);
+          }
+
+          const { x: renderX, y: renderY } = logicalToRender(building.position.x, building.position.y);
+          // Gap generator radius is 10 tiles
+          const gapRadius = 10 * SPRITE_CONFIG.tileSize;
+          const pulse = 0.08 + 0.04 * Math.sin(this.time.now / 1200);
+
+          overlay.clear();
+          overlay.fillStyle(0x000044, pulse);
+          overlay.fillCircle(renderX, renderY, gapRadius);
+          overlay.lineStyle(1, 0x000066, pulse + 0.05);
+          overlay.strokeCircle(renderX, renderY, gapRadius);
+        }
+      }
+    }
+
+    // Clean up overlays for inactive gap generators
+    this.gapGeneratorOverlays.forEach((overlay, id) => {
+      if (!activeGapIds.has(id)) {
+        overlay.destroy();
+        this.gapGeneratorOverlays.delete(id);
+      }
+    });
+  }
+
+  // --- Chrono Freeze Visual ---
+  private updateChronoFreezeVisuals(): void {
+    const store = useGameStore.getState();
+    const currentPlayer = store.currentPlayer;
+    if (!currentPlayer) return;
+
+    const allPlayers = [currentPlayer, ...store.aiPlayers].filter(Boolean) as Player[];
+    const activeFreezeIds = new Set<string>();
+
+    for (const player of allPlayers) {
+      // Check units for freeze progress
+      for (const unit of player.units) {
+        if (unit.chronoFreezeProgress && unit.chronoFreezeProgress > 0) {
+          activeFreezeIds.add(unit.id);
+          const sprite = this.unitSprites.get(unit.id);
+          if (sprite) {
+            // Apply blue tint overlay (only Sprite supports tint, not Shape)
+            const alpha = unit.chronoFreezeProgress * 0.6;
+            if (sprite instanceof Phaser.GameObjects.Sprite) {
+              sprite.setTint(0x4488ff, 0x4488ff, 0x4488ff, 0x4488ff);
+            }
+            sprite.setAlpha(1 - alpha * 0.3);
+          }
+
+          // Draw freeze overlay circle
+          let gfx = this.chronoFreezeOverlays.get(unit.id);
+          if (!gfx) {
+            gfx = this.add.graphics();
+            gfx.setDepth(RENDER_CONFIG.unitDepthBase + 1);
+            this.chronoFreezeOverlays.set(unit.id, gfx);
+          }
+
+          const { x: renderX, y: renderY } = logicalToRender(unit.position.x, unit.position.y);
+          gfx.clear();
+          const freezeAlpha = unit.chronoFreezeProgress * 0.6;
+          const pulse = 0.8 + 0.2 * Math.sin(this.time.now / 400);
+          gfx.fillStyle(0x4488ff, freezeAlpha * pulse);
+          gfx.fillCircle(renderX, renderY, 16);
+          gfx.lineStyle(2, 0x88bbff, freezeAlpha * pulse);
+          gfx.strokeCircle(renderX, renderY, 16);
+        } else {
+          // Not frozen - restore normal appearance
+          const sprite = this.unitSprites.get(unit.id);
+          if (sprite && player.id === currentPlayer.id) {
+            if (sprite instanceof Phaser.GameObjects.Sprite) {
+              sprite.clearTint();
+            }
+            sprite.setAlpha(1.0);
+          }
+        }
+      }
+
+      // Check buildings for freeze progress
+      for (const building of player.buildings) {
+        if (building.chronoFreezeProgress && building.chronoFreezeProgress > 0) {
+          activeFreezeIds.add(building.id);
+          const sprite = this.buildingSprites.get(building.id);
+          if (sprite) {
+            const alpha = building.chronoFreezeProgress * 0.6;
+            if (sprite instanceof Phaser.GameObjects.Image) {
+              sprite.setTint(0x4488ff);
+            }
+            sprite.setAlpha(1 - alpha * 0.3);
+          }
+
+          let gfx = this.chronoFreezeOverlays.get(building.id);
+          if (!gfx) {
+            gfx = this.add.graphics();
+            gfx.setDepth(RENDER_CONFIG.healthBarDepth + 1);
+            this.chronoFreezeOverlays.set(building.id, gfx);
+          }
+
+          const { x: renderX, y: renderY } = logicalToRender(building.position.x, building.position.y);
+          const bState = this.buildingStates.get(building.id);
+          const w = bState?.width || 64;
+          const h = bState?.height || 64;
+          gfx.clear();
+          const freezeAlpha = building.chronoFreezeProgress * 0.6;
+          const pulse = 0.8 + 0.2 * Math.sin(this.time.now / 400);
+          gfx.fillStyle(0x4488ff, freezeAlpha * pulse);
+          gfx.fillRect(renderX - w / 2, renderY - h / 2, w, h);
+          gfx.lineStyle(2, 0x88bbff, freezeAlpha * pulse);
+          gfx.strokeRect(renderX - w / 2, renderY - h / 2, w, h);
+        } else {
+          const sprite = this.buildingSprites.get(building.id);
+          if (sprite && building.isConstructed && building.isPowered) {
+            if (sprite instanceof Phaser.GameObjects.Image) {
+              sprite.clearTint();
+            }
+            sprite.setAlpha(1.0);
+          }
+        }
+      }
+    }
+
+    // Clean up overlays for entities no longer frozen
+    this.chronoFreezeOverlays.forEach((gfx, id) => {
+      if (!activeFreezeIds.has(id)) {
+        gfx.destroy();
+        this.chronoFreezeOverlays.delete(id);
+        // Restore sprite appearance
+        const unitSprite = this.unitSprites.get(id);
+        if (unitSprite) {
+          if (unitSprite instanceof Phaser.GameObjects.Sprite) {
+            unitSprite.clearTint();
+          }
+          unitSprite.setAlpha(1.0);
+        }
+        const buildingSprite = this.buildingSprites.get(id);
+        if (buildingSprite) {
+          if (buildingSprite instanceof Phaser.GameObjects.Image) {
+            buildingSprite.clearTint();
+          }
+          buildingSprite.setAlpha(1.0);
+        }
+      }
     });
   }
 
@@ -2077,6 +2459,12 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     // Clean up unit from control groups
     this.groupManager?.removeUnitFromAllGroups(id);
     this.unitStates.delete(id);
+    // Clean up chrono freeze overlay
+    const freezeOverlay = this.chronoFreezeOverlays.get(id);
+    if (freezeOverlay) {
+      freezeOverlay.destroy();
+      this.chronoFreezeOverlays.delete(id);
+    }
   }
 
   removeBuilding(id: string): void {
@@ -2110,6 +2498,11 @@ export class PhaserGameScene extends Phaser.Scene implements GameRenderer {
     if (psychicRing) {
       psychicRing.destroy();
       this.psychicSensorRings.delete(id);
+    }
+    const freezeOverlay = this.chronoFreezeOverlays.get(id);
+    if (freezeOverlay) {
+      freezeOverlay.destroy();
+      this.chronoFreezeOverlays.delete(id);
     }
     this.buildingStates.delete(id);
   }

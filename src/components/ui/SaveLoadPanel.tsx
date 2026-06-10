@@ -3,6 +3,8 @@ import { gameUIController } from '../../game/ui/GameUIController';
 import { saveManager, SaveSlot, AUTO_SAVE_SLOT_ID, AUTO_SAVE_LABEL } from '../../game/systems/SaveManager';
 import { useGameStore } from '../../store/gameStore';
 import { Difficulty } from '../../types';
+import { ivanBombSystem } from '../../game/systems/IvanBombSystem';
+import { radiationSystem } from '../../game/systems/RadiationSystem';
 import './SaveLoadPanel.css';
 
 interface SaveLoadPanelProps {
@@ -87,6 +89,8 @@ export const SaveLoadPanel: React.FC<SaveLoadPanelProps> = ({
       gameState: storeState.gameState,
       neutralBuildings: storeState.neutralBuildings,
       gameSettings: storeState.gameSettings,
+      pendingBombs: ivanBombSystem.getBombs(),
+      radiationZones: radiationSystem.getZones(),
     };
 
     try {

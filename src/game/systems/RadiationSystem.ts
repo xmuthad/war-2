@@ -31,6 +31,8 @@ export class RadiationSystem {
     this.deployedUnitIds.add(desolator.id);
     desolator.isDeploying = true;
 
+    gameEventBus.emit('sound:play', { key: 'radiationDeploy', position: desolator.position });
+
     gameEventBus.emit('radiation:deploy', {
       unitId: desolator.id,
       position: desolator.position,
@@ -119,6 +121,10 @@ export class RadiationSystem {
 
   getZones(): RadiationZone[] {
     return this.zones;
+  }
+
+  restoreZones(zones: RadiationZone[]): void {
+    this.zones = zones;
   }
 
   isDeployed(unitId: string): boolean {

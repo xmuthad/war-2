@@ -1,8 +1,10 @@
 import type { Unit, Building, Player, GameMapData, ResourceNode, Vector2 } from '../../types';
-import { UnitState, BuildingType, TileType, UpgradeType } from '../../types';
+import { UnitState, UnitType, BuildingType, TileType, UpgradeType } from '../../types';
 import { GAME_CONFIG } from '../config/GameConfig';
 import { mapManager } from '../map/MapManager';
 import { gameEventBus } from './GameEventBus';
+
+const CHRONO_SHIFT_DURATION = 1; // 1 second teleport animation/delay
 
 function distance(a: Vector2, b: Vector2): number {
   const dx = a.x - b.x;
@@ -64,7 +66,40 @@ export class HarvestSystem {
       return;
     }
 
+    // Chrono Miner: handle teleport charging when full
+    if (unit.type === UnitType.CHRONO_MINER && unit.isChronoShifting) {
+      unit.chronoShiftTimer = (unit.chronoShiftTimer || 0) - deltaTime;
+      if (unit.chronoShiftTimer <= 0) {
+        // Teleport complete: move to refinery
+        unit.isChronoShifting = false;
+        const refinery = findNearestRefinery(unit, player.buildings);
+        if (refinery) {
+          unit.position = { ...refinery.position };
+          this.deliverOre(unit, player, refinery);
+          // Teleport back to resource
+          const resource = unit.harvestTarget || findNearestResource(unit, map?.resourceNodes || []);
+          if (resource) {
+            const resourcePos = { x: resource.position.x * GAME_CONFIG.TILE_SIZE, y: resource.position.y * GAME_CONFIG.TILE_SIZE };
+            unit.position = { ...resourcePos };
+            unit.harvestTarget = resource;
+            unit.waypoints = [];
+          }
+          unit.state = UnitState.HARVESTING;
+        } else {
+          unit.state = UnitState.IDLE;
+        }
+      }
+      return;
+    }
+
     if (unit.cargo >= unit.cargoCapacity) {
+      // Chrono Miner: teleport instead of walking
+      if (unit.type === UnitType.CHRONO_MINER) {
+        unit.isChronoShifting = true;
+        unit.chronoShiftTimer = CHRONO_SHIFT_DURATION;
+        unit.state = UnitState.RETURNING;
+        return;
+      }
       unit.state = UnitState.RETURNING;
       const refinery = findNearestRefinery(unit, player.buildings);
       if (refinery) {
@@ -128,6 +163,33 @@ export class HarvestSystem {
   }
 
   private updateReturning(unit: Unit, player: Player, map: GameMapData | null, deltaTime: number): void {
+    // Chrono Miner: handle teleport charging when returning
+    if (unit.type === UnitType.CHRONO_MINER && unit.isChronoShifting) {
+      unit.chronoShiftTimer = (unit.chronoShiftTimer || 0) - deltaTime;
+      if (unit.chronoShiftTimer <= 0) {
+        unit.isChronoShifting = false;
+        const refinery = findNearestRefinery(unit, player.buildings);
+        if (refinery) {
+          unit.position = { ...refinery.position };
+          this.deliverOre(unit, player, refinery);
+          // Teleport back to resource
+          const nextResource = findNearestResource(unit, map?.resourceNodes || []);
+          if (nextResource) {
+            const resourcePos = { x: nextResource.position.x * GAME_CONFIG.TILE_SIZE, y: nextResource.position.y * GAME_CONFIG.TILE_SIZE };
+            unit.position = { ...resourcePos };
+            unit.harvestTarget = nextResource;
+            unit.waypoints = [];
+          }
+          unit.state = UnitState.HARVESTING;
+        } else {
+          unit.state = UnitState.IDLE;
+          unit.cargo = 0;
+          unit.waypoints = [];
+        }
+      }
+      return;
+    }
+
     const refinery = findNearestRefinery(unit, player.buildings);
 
     if (!refinery) {
@@ -147,36 +209,7 @@ export class HarvestSystem {
       // MovementSystem handles the actual movement via waypoints
       return;
     } else {
-      const resourceMultiplier = unit.harvestTarget?.resourceType === 'gem' ? 75
-        : unit.harvestTarget?.resourceType === 'crate' ? 100
-        : 50;
-      let depositValue = unit.cargo * resourceMultiplier;
-      // Apply ore value upgrades
-      if (player.researchedUpgrades.includes(UpgradeType.ORE_COMPRESSION)) {
-        depositValue = Math.floor(depositValue * 1.2);
-      }
-      if (player.researchedUpgrades.includes(UpgradeType.GOLD_REFINING)) {
-        depositValue = Math.floor(depositValue * 1.5);
-      }
-      // Ore Purifier: 25% bonus if player has a constructed and powered ore purifier
-      const hasOrePurifier = player.buildings.some(
-        b => b.type === BuildingType.ORE_PURIFIER && b.isConstructed && b.isPowered
-      );
-      if (hasOrePurifier) {
-        depositValue = Math.floor(depositValue * 1.25);
-      }
-      player.money += depositValue;
-      player.statistics.resourcesGathered += depositValue;
-      gameEventBus.emit('resource:collected', { amount: depositValue, faction: player.faction });
-      gameEventBus.emit('resource:deposited', { amount: depositValue, faction: player.faction, position: unit.position });
-      // Increment refinery ore storage
-      if (refinery.oreStorage !== undefined) {
-        refinery.oreStorage = Math.min(
-          refinery.maxOreStorage || 1000,
-          refinery.oreStorage + depositValue
-        );
-      }
-      unit.cargo = 0;
+      this.deliverOre(unit, player, refinery);
       unit.state = UnitState.HARVESTING;
 
       const nextResource = findNearestResource(unit, map?.resourceNodes || []);
@@ -187,5 +220,38 @@ export class HarvestSystem {
         unit.state = UnitState.IDLE;
       }
     }
+  }
+
+  private deliverOre(unit: Unit, player: Player, refinery: Building): void {
+    const resourceMultiplier = unit.harvestTarget?.resourceType === 'gem' ? 75
+      : unit.harvestTarget?.resourceType === 'crate' ? 100
+      : 50;
+    let depositValue = unit.cargo * resourceMultiplier;
+    // Apply ore value upgrades
+    if (player.researchedUpgrades.includes(UpgradeType.ORE_COMPRESSION)) {
+      depositValue = Math.floor(depositValue * 1.2);
+    }
+    if (player.researchedUpgrades.includes(UpgradeType.GOLD_REFINING)) {
+      depositValue = Math.floor(depositValue * 1.5);
+    }
+    // Ore Purifier: 25% bonus if player has a constructed and powered ore purifier
+    const hasOrePurifier = player.buildings.some(
+      b => b.type === BuildingType.ORE_PURIFIER && b.isConstructed && b.isPowered
+    );
+    if (hasOrePurifier) {
+      depositValue = Math.floor(depositValue * 1.25);
+    }
+    player.money += depositValue;
+    player.statistics.resourcesGathered += depositValue;
+    gameEventBus.emit('resource:collected', { amount: depositValue, faction: player.faction });
+    gameEventBus.emit('resource:deposited', { amount: depositValue, faction: player.faction, position: unit.position });
+    // Increment refinery ore storage
+    if (refinery.oreStorage !== undefined) {
+      refinery.oreStorage = Math.min(
+        refinery.maxOreStorage || 1000,
+        refinery.oreStorage + depositValue
+      );
+    }
+    unit.cargo = 0;
   }
 }

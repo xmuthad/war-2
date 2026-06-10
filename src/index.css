@@ -67,15 +67,15 @@
   --font-heading: 'Orbitron', sans-serif;
   --font-body: 'Roboto Mono', monospace;
 
-  --font-size-xs: 0.7rem;
-  --font-size-sm: 0.8rem;
-  --font-size-base: 0.9rem;
-  --font-size-md: 0.95rem;
-  --font-size-lg: 1.05rem;
-  --font-size-xl: 1.15rem;
-  --font-size-2xl: 1.35rem;
-  --font-size-3xl: 1.6rem;
-  --font-size-4xl: 2.2rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.825rem;
+  --font-size-base: 0.925rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.1rem;
+  --font-size-xl: 1.2rem;
+  --font-size-2xl: 1.45rem;
+  --font-size-3xl: 1.75rem;
+  --font-size-4xl: 2.4rem;
 
   --spacing-xs: 4px;
   --spacing-sm: 6px;
@@ -88,7 +88,7 @@
   --radius-sm: 2px;
   --radius-md: 3px;
   --radius-lg: 4px;
-  --radius-xl: 5px;
+  --radius-xl: 6px;
   --radius-pill: 3px;
   --radius-full: 50%;
 
@@ -107,8 +107,9 @@
   --bevel-pressed: inset 0 2px 4px rgba(0, 0, 0, 0.6);
 
   /* Panel gradient */
-  --panel-gradient: linear-gradient(180deg, #243444 0%, #1a2832 40%, #142028 100%);
+  --panel-gradient: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
   --panel-gradient-dark: linear-gradient(180deg, #1a2832 0%, #0d1520 100%);
+  --panel-gradient-highlight: linear-gradient(180deg, #2e4050 0%, #1e3040 30%, #162430 70%, #101c28 100%);
 
   /* Scanline */
   --scanline-opacity: 0.03;
@@ -308,7 +309,17 @@ h1, h2, h3, h4, h5, h6 {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--color-metal-highlight), transparent);
-  opacity: 0.4;
+  opacity: 0.5;
+}
+
+.metal-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.4), transparent);
 }
 
 /* Bevel button - 3D raised effect */
@@ -330,6 +341,7 @@ h1, h2, h3, h4, h5, h6 {
   background: linear-gradient(180deg, #4a5a6a 0%, #3a4a5a 50%, #2a3a4a 100%);
   border-color: var(--color-primary);
   box-shadow: var(--bevel-highlight), var(--bevel-shadow), var(--shadow-primary);
+  transform: translateY(-1px);
 }
 
 .bevel-button:active {

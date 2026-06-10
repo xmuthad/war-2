@@ -53,6 +53,168 @@ function findNearestRefineryPosition(unitId: string): Vector2 | null {
   return nearest;
 }
 
+// === Smart Build Order System ===
+
+export type BuildOrderPhase = 'early' | 'mid' | 'late';
+export type BuildOrderVariation = 'rush' | 'turtle' | 'tech' | 'standard';
+
+interface BuildOrderStep {
+  buildingType: BuildingType;
+  condition?: (buildings: Array<{ type: string; isConstructed: boolean }>) => boolean;
+}
+
+/** Get the current game phase based on game time in seconds */
+export function getGamePhase(gameTimeSec: number): BuildOrderPhase {
+  if (gameTimeSec < 120) return 'early';
+  if (gameTimeSec < 300) return 'mid';
+  return 'late';
+}
+
+/** Get the standard build order for a given game phase */
+export function getBuildOrderForPhase(phase: BuildOrderPhase): BuildOrderStep[] {
+  switch (phase) {
+    case 'early':
+      // Early game (0-2min): Power → Barracks → Refinery → 2nd Miner
+      return [
+        { buildingType: BuildingType.POWER },
+        { buildingType: BuildingType.BARRACKS },
+        { buildingType: BuildingType.REFINERY },
+        // 2nd miner is a unit, not a building - handled by AIBrain
+      ];
+    case 'mid':
+      // Mid game (2-5min): War Factory → Radar → More Miners → Defense
+      return [
+        { buildingType: BuildingType.WARFACTORY, condition: (b) => b.some(x => x.type === BuildingType.REFINERY && x.isConstructed) },
+        { buildingType: BuildingType.RADAR, condition: (b) => b.some(x => x.type === BuildingType.WARFACTORY && x.isConstructed) },
+        { buildingType: BuildingType.REFINERY, condition: (b) => b.filter(x => x.type === BuildingType.REFINERY && x.isConstructed).length < 2 },
+        { buildingType: BuildingType.TURRET, condition: (b) => b.filter(x => [BuildingType.TURRET, BuildingType.TESLA_COIL, BuildingType.FLAME_TOWER, BuildingType.DEFENSE].includes(x.type as BuildingType) && x.isConstructed).length < 2 },
+      ];
+    case 'late':
+      // Late game (5min+): Tech → Superweapons → Advanced Units
+      return [
+        { buildingType: BuildingType.TECH, condition: (b) => b.some(x => x.type === BuildingType.RADAR && x.isConstructed) && !b.some(x => x.type === BuildingType.TECH && x.isConstructed) },
+        { buildingType: BuildingType.REFINERY, condition: (b) => b.filter(x => x.type === BuildingType.REFINERY && x.isConstructed).length < 3 },
+        { buildingType: BuildingType.REPAIR, condition: (b) => !b.some(x => x.type === BuildingType.REPAIR && x.isConstructed) },
+        { buildingType: BuildingType.POWER, condition: () => true },
+      ];
+  }
+}
+
+/** Get build order variation for HARD/BRUTAL difficulty */
+export function getBuildOrderVariation(variation: BuildOrderVariation): BuildOrderStep[] {
+  switch (variation) {
+    case 'rush':
+      // Rush: fast barracks, skip refinery, go straight for war factory
+      return [
+        { buildingType: BuildingType.POWER },
+        { buildingType: BuildingType.BARRACKS },
+        { buildingType: BuildingType.BARRACKS, condition: (b) => b.filter(x => x.type === BuildingType.BARRACKS && x.isConstructed).length < 2 },
+        { buildingType: BuildingType.REFINERY },
+        { buildingType: BuildingType.WARFACTORY, condition: (b) => b.some(x => x.type === BuildingType.REFINERY && x.isConstructed) },
+      ];
+    case 'turtle':
+      // Turtle: heavy defense, multiple power, slow tech
+      return [
+        { buildingType: BuildingType.POWER },
+        { buildingType: BuildingType.POWER, condition: (b) => b.filter(x => x.type === BuildingType.POWER).length < 2 },
+        { buildingType: BuildingType.BARRACKS },
+        { buildingType: BuildingType.REFINERY },
+        { buildingType: BuildingType.TURRET, condition: (b) => b.some(x => x.type === BuildingType.BARRACKS && x.isConstructed) },
+        { buildingType: BuildingType.REFINERY, condition: (b) => b.filter(x => x.type === BuildingType.REFINERY && x.isConstructed).length < 2 },
+        { buildingType: BuildingType.WARFACTORY, condition: (b) => b.some(x => x.type === BuildingType.REFINERY && x.isConstructed) },
+        { buildingType: BuildingType.TESLA_COIL, condition: (b) => b.some(x => x.type === BuildingType.WARFACTORY && x.isConstructed) },
+      ];
+    case 'tech':
+      // Tech rush: minimal military, fast tech center
+      return [
+        { buildingType: BuildingType.POWER },
+        { buildingType: BuildingType.BARRACKS },
+        { buildingType: BuildingType.REFINERY },
+        { buildingType: BuildingType.WARFACTORY, condition: (b) => b.some(x => x.type === BuildingType.REFINERY && x.isConstructed) },
+        { buildingType: BuildingType.RADAR, condition: (b) => b.some(x => x.type === BuildingType.WARFACTORY && x.isConstructed) },
+        { buildingType: BuildingType.TECH, condition: (b) => b.some(x => x.type === BuildingType.RADAR && x.isConstructed) },
+      ];
+    case 'standard':
+    default:
+      return getBuildOrderForPhase('early');
+  }
+}
+
+/** Counter-building logic: detect enemy composition and return recommended unit types */
+export function getCounterBuildUnits(enemyUnits: Array<{ type: string; isAirborne?: boolean; isInfantry?: boolean }>): UnitType[] {
+  const counters: UnitType[] = [];
+
+  const enemyAirCount = enemyUnits.filter(u => u.isAirborne).length;
+  const enemyInfantryCount = enemyUnits.filter(u => u.isInfantry).length;
+  const enemyTankCount = enemyUnits.filter(u =>
+    !u.isAirborne && !u.isInfantry &&
+    [UnitType.TANK, UnitType.RHINO, UnitType.APOCALYPSE, UnitType.PRISM, UnitType.GUARDIAN, UnitType.GRIZZLY, UnitType.LASH].includes(u.type as UnitType)
+  ).length;
+
+  // Counter air units with anti-air
+  if (enemyAirCount >= 2) {
+    counters.push(UnitType.ROCKET);
+    counters.push(UnitType.FLAKINFANTRY);
+    counters.push(UnitType.FLAK);
+  }
+
+  // Counter tanks with anti-tank (rocket infantry, tesla, prism)
+  if (enemyTankCount >= 3) {
+    counters.push(UnitType.ROCKET);
+    counters.push(UnitType.TESLA);
+    counters.push(UnitType.PRISM);
+  }
+
+  // Counter infantry with anti-infantry
+  if (enemyInfantryCount >= 4) {
+    counters.push(UnitType.SNIPER);
+    counters.push(UnitType.GATTLING_TANK);
+  }
+
+  return counters;
+}
+
+/** Get the next recommended building from the smart build order */
+export function getNextBuildOrderBuilding(
+  faction: Faction,
+  gameTimeSec: number,
+  difficulty: 'easy' | 'normal' | 'hard' | 'brutal',
+  existingBuildings: Array<{ type: string; isConstructed: boolean }>
+): BuildingType | null {
+  // For HARD/BRUTAL, pick a build order variation
+  if (difficulty === 'hard' || difficulty === 'brutal') {
+    const variations: BuildOrderVariation[] = ['rush', 'turtle', 'tech'];
+    // Deterministic selection based on game time to avoid randomness
+    const variationIndex = Math.floor(gameTimeSec / 120) % variations.length;
+    const variation = variations[variationIndex];
+    const order = getBuildOrderVariation(variation);
+
+    for (const step of order) {
+      const alreadyHas = existingBuildings.some(b => b.type === step.buildingType && b.isConstructed);
+      if (!alreadyHas) {
+        if (!step.condition || step.condition(existingBuildings)) {
+          return step.buildingType;
+        }
+      }
+    }
+  }
+
+  // Standard: use phase-based build order
+  const phase = getGamePhase(gameTimeSec);
+  const order = getBuildOrderForPhase(phase);
+
+  for (const step of order) {
+    const alreadyHas = existingBuildings.some(b => b.type === step.buildingType && b.isConstructed);
+    if (!alreadyHas) {
+      if (!step.condition || step.condition(existingBuildings)) {
+        return step.buildingType;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function createGameCommands(faction: Faction): GameCommands {
   return {
     moveUnit(unitId: string, position: Vector2): void {

@@ -48,6 +48,10 @@ export interface AIUnit {
   maxPassengers?: number;
   isChronoShifting?: boolean;
   isChronoCooldown?: boolean;
+  isSubmerged?: boolean;
+  isDisguised?: boolean;
+  special?: string;
+  isRadiationDeployed?: boolean;
   data?: {
     canAttack?: boolean;
     canHarvest?: boolean;

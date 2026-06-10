@@ -716,7 +716,8 @@ export class PathfindingManager {
     unitSize: number = 1,
     isAirborne: boolean = false,
     isNaval: boolean = false,
-    excludeUnitId?: string  // 排除自身单位
+    excludeUnitId?: string,  // 排除自身单位
+    isAmphibious: boolean = false  // 两栖单位（运输船）
   ): PathResult {
     if (isAirborne) {
       // Air units fly straight - no terrain avoidance needed
@@ -729,6 +730,9 @@ export class PathfindingManager {
         cost: Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2),
         nodesExplored: 0
       };
+    }
+    if (isAmphibious) {
+      return this.findPathAmphibious(startX, startY, endX, endY, unitSize, excludeUnitId);
     }
     if (isNaval) {
       return this.findPathNaval(startX, startY, endX, endY, unitSize, excludeUnitId);
@@ -834,6 +838,135 @@ export class PathfindingManager {
   private isNavalWalkable(x: number, y: number): boolean {
     if (x < 0 || x >= this.grid.getWidth() || y < 0 || y >= this.grid.getHeight()) return false;
     return this.grid.getTileType(x, y) === TileType.WATER;
+  }
+
+  /** Check if a tile is walkable for amphibious units (water or walkable land, excluding mountains/forests/cliffs) */
+  private isAmphibiousWalkable(x: number, y: number): boolean {
+    if (x < 0 || x >= this.grid.getWidth() || y < 0 || y >= this.grid.getHeight()) return false;
+    const tileType = this.grid.getTileType(x, y);
+    if (!tileType) return false;
+    // Water is walkable
+    if (tileType === TileType.WATER) return true;
+    // Mountains, forests, and cliffs are NOT walkable for amphibious units
+    if (tileType === TileType.MOUNTAIN || tileType === TileType.FOREST || tileType === TileType.CLIFF) return false;
+    // All other land tiles are walkable (grass, sand, road, ore, ice, mud, rubble, crater, bridge)
+    return this.grid.isWalkable(x, y);
+  }
+
+  private isAmphibiousAreaWalkable(x: number, y: number, unitSize: number): boolean {
+    for (let dx = 0; dx < unitSize; dx++) {
+      for (let dy = 0; dy < unitSize; dy++) {
+        if (!this.isAmphibiousWalkable(x + dx, y + dy)) return false;
+      }
+    }
+    return true;
+  }
+
+  private findNearestAmphibiousWalkable(x: number, y: number): { x: number; y: number } | null {
+    for (let radius = 1; radius <= Math.max(this.grid.getWidth(), this.grid.getHeight()); radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          if (this.isAmphibiousWalkable(x + dx, y + dy)) {
+            return { x: x + dx, y: y + dy };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Find path for amphibious units (transport ships) that can traverse both water and walkable land */
+  private findPathAmphibious(
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    unitSize: number,
+    _excludeUnitId?: string
+  ): PathResult {
+    const startGrid = this.grid.worldToGrid(startX, startY);
+    const endGrid = this.grid.worldToGrid(endX, endY);
+
+    if (!this.isAmphibiousAreaWalkable(endGrid.x, endGrid.y, unitSize)) {
+      const nearest = this.findNearestAmphibiousWalkable(endGrid.x, endGrid.y);
+      if (nearest) {
+        endGrid.x = nearest.x;
+        endGrid.y = nearest.y;
+      } else {
+        return { path: [], success: false, cost: Infinity, nodesExplored: 0 };
+      }
+    }
+
+    const openList = new MinHeap<PathNode>((a, b) => a.f - b.f);
+    const openMap: Map<string, PathNode> = new Map();
+    const closedSet: Set<string> = new Set();
+    let nodesExplored = 0;
+    const maxIter = 10000;
+
+    const startNode: PathNode = {
+      x: startGrid.x, y: startGrid.y, g: 0,
+      h: Math.max(Math.abs(endGrid.x - startGrid.x), Math.abs(endGrid.y - startGrid.y)) +
+         (Math.SQRT2 - 1) * Math.min(Math.abs(endGrid.x - startGrid.x), Math.abs(endGrid.y - startGrid.y)),
+      f: 0, parent: null
+    };
+    startNode.f = startNode.g + startNode.h;
+
+    openList.push(startNode);
+    openMap.set(`${startGrid.x},${startGrid.y}`, startNode);
+
+    const dirs = [
+      {dx: 0, dy: -1}, {dx: 1, dy: 0}, {dx: 0, dy: 1}, {dx: -1, dy: 0},
+      {dx: -1, dy: -1}, {dx: 1, dy: -1}, {dx: -1, dy: 1}, {dx: 1, dy: 1}
+    ];
+
+    while (openList.size > 0 && nodesExplored < maxIter) {
+      nodesExplored++;
+      const current = openList.pop()!;
+      const currentKey = `${current.x},${current.y}`;
+      openMap.delete(currentKey);
+
+      if (current.x === endGrid.x && current.y === endGrid.y) {
+        const path = this.reconstructNavalPath(current);
+        return { path, success: true, cost: current.g, nodesExplored };
+      }
+
+      closedSet.add(currentKey);
+
+      for (const dir of dirs) {
+        const nx = current.x + dir.dx;
+        const ny = current.y + dir.dy;
+        const nKey = `${nx},${ny}`;
+
+        if (closedSet.has(nKey)) continue;
+        if (!this.isAmphibiousAreaWalkable(nx, ny, unitSize)) continue;
+
+        const isDiag = dir.dx !== 0 && dir.dy !== 0;
+        let moveCost = isDiag ? 1.414 : 1.0;
+        // Land tiles cost double for amphibious units (half speed on land)
+        const tileType = this.grid.getTileType(nx, ny);
+        if (tileType !== TileType.WATER) {
+          moveCost *= 2;
+        }
+        const tentativeG = current.g + moveCost;
+
+        const existing = openMap.get(nKey);
+        if (!existing) {
+          const h = Math.max(Math.abs(endGrid.x - nx), Math.abs(endGrid.y - ny)) +
+                    (Math.SQRT2 - 1) * Math.min(Math.abs(endGrid.x - nx), Math.abs(endGrid.y - ny));
+          const node: PathNode = { x: nx, y: ny, g: tentativeG, h, f: tentativeG + h, parent: current };
+          openList.push(node);
+          openMap.set(nKey, node);
+        } else if (tentativeG < existing.g) {
+          existing.g = tentativeG;
+          existing.f = tentativeG + existing.h;
+          existing.parent = current;
+          openList.push(existing);
+        }
+      }
+    }
+
+    return { path: [], success: false, cost: Infinity, nodesExplored };
   }
 
   private isNavalAreaWalkable(x: number, y: number, unitSize: number): boolean {

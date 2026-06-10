@@ -26,6 +26,8 @@ import { SaveLoadPanel } from './SaveLoadPanel';
 import { PerformanceOverlay } from './PerformanceOverlay';
 import { Scoreboard } from './Scoreboard';
 import { ResourceBar } from './ResourceBar';
+import { TechTreePanel } from './TechTreePanel';
+import { GameNotificationSystem } from './GameNotificationSystem';
 import './GameUI.css';
 
 const UNIT_PORTRAITS: Record<string, string> = {
@@ -59,6 +61,28 @@ const UNIT_PORTRAITS: Record<string, string> = {
   [UnitType.TESLA]: '⚡',
   [UnitType.YAK]: '✈️',
   [UnitType.FLAK]: '🎯',
+  [UnitType.ATTACK_DOG]: '🐕',
+  [UnitType.WAR_MINER]: '⛏️',
+  [UnitType.MIRAGE]: '🌴',
+  [UnitType.GRIZZLY]: '🐻',
+  [UnitType.LASH]: '⚡',
+  [UnitType.DREADNOUGHT]: '🚢',
+  [UnitType.AEGIS]: '🛡️',
+  [UnitType.GI]: '🎖️',
+  [UnitType.GUARDIAN_GI]: '🛡️',
+  [UnitType.BRUTE]: '💪',
+  [UnitType.DISC]: '🛸',
+  [UnitType.BOOMER]: '💥',
+  [UnitType.GATTLING_TANK]: '🔫',
+  [UnitType.SLAVE_MINER]: '⚒️',
+  [UnitType.DOLPHIN]: '🐬',
+  [UnitType.SQUID]: '🦑',
+  [UnitType.CARRIER]: '✈️',
+  [UnitType.V3_ROCKET]: '🚀',
+  [UnitType.CHRONO_MINER]: '⏳',
+  [UnitType.HARRIER]: '✈️',
+  [UnitType.SPY]: '🕵️',
+  [UnitType.MCV]: '🏗️',
 };
 
 const TUTORIAL_STEPS = [
@@ -260,6 +284,116 @@ const UNIT_RESPONSES: Record<string, {
     move: ['飞行', '收到'],
     attack: ['扫射', '开火'],
   },
+  [UnitType.ATTACK_DOG]: {
+    select: ['汪！'],
+    move: ['汪汪！'],
+    attack: ['撕咬！'],
+  },
+  [UnitType.WAR_MINER]: {
+    select: ['武装矿车就绪'],
+    move: ['出发采矿'],
+    attack: ['自卫反击'],
+  },
+  [UnitType.MIRAGE]: {
+    select: ['幻影坦克就位'],
+    move: ['隐匿移动'],
+    attack: ['光谱射线'],
+  },
+  [UnitType.GRIZZLY]: {
+    select: ['灰熊坦克待命'],
+    move: ['推进'],
+    attack: ['开火'],
+  },
+  [UnitType.LASH]: {
+    select: ['鞭打者就绪'],
+    move: ['行进中'],
+    attack: ['发射'],
+  },
+  [UnitType.DREADNOUGHT]: {
+    select: ['无畏战舰就位'],
+    move: ['全速前进'],
+    attack: ['导弹齐射'],
+  },
+  [UnitType.AEGIS]: {
+    select: ['神盾巡洋舰待命'],
+    move: ['护航中'],
+    attack: ['防空导弹'],
+  },
+  [UnitType.GI]: {
+    select: ['GI就位'],
+    move: ['移动'],
+    attack: ['开火'],
+  },
+  [UnitType.GUARDIAN_GI]: {
+    select: ['守护者GI就位'],
+    move: ['推进'],
+    attack: ['反坦克导弹'],
+  },
+  [UnitType.BRUTE]: {
+    select: ['狂兽人饥饿了'],
+    move: ['冲锋'],
+    attack: ['粉碎'],
+  },
+  [UnitType.DISC]: {
+    select: ['飞碟就位'],
+    move: ['飘移中'],
+    attack: ['心灵控制光束'],
+  },
+  [UnitType.BOOMER]: {
+    select: ['台风潜艇就绪'],
+    move: ['下潜'],
+    attack: ['鱼雷发射'],
+  },
+  [UnitType.GATTLING_TANK]: {
+    select: ['加特林坦克就绪'],
+    move: ['行进'],
+    attack: ['扫射'],
+  },
+  [UnitType.SLAVE_MINER]: {
+    select: ['奴隶矿场就绪'],
+    move: ['转移'],
+    attack: ['自卫'],
+  },
+  [UnitType.DOLPHIN]: {
+    select: ['海豚就位'],
+    move: ['游动'],
+    attack: ['声波攻击'],
+  },
+  [UnitType.SQUID]: {
+    select: ['乌贼就位'],
+    move: ['潜行'],
+    attack: ['缠绕'],
+  },
+  [UnitType.CARRIER]: {
+    select: ['航母就位'],
+    move: ['航行'],
+    attack: ['舰载机起飞'],
+  },
+  [UnitType.V3_ROCKET]: {
+    select: ['V3火箭车就绪'],
+    move: ['转移阵地'],
+    attack: ['远程打击'],
+  },
+  [UnitType.CHRONO_MINER]: {
+    select: ['超时空矿车就绪'],
+    move: ['传送采矿'],
+    attack: ['无武装'],
+  },
+  [UnitType.HARRIER]: {
+    select: ['鹞式战机待命'],
+    move: ['升空'],
+    attack: ['对地攻击'],
+  },
+  [UnitType.SPY]: {
+    select: ['间谍就位'],
+    move: ['潜行'],
+    attack: ['渗透'],
+  },
+  [UnitType.MCV]: {
+    select: ['移动基地车就绪'],
+    move: ['展开位置确认'],
+    attack: ['无武装'],
+  },
 };
 
 function getUnitResponse(unitType: UnitType, action: 'select' | 'move' | 'attack'): string {
@@ -349,6 +483,7 @@ export const GameUI: React.FC = () => {
   const unitPanelRef = useRef<HTMLDivElement | null>(null);
   const buildingPanelRef = useRef<HTMLDivElement | null>(null);
   const [showMenuConfirm, setShowMenuConfirm] = useState(false);
+  const [showTechTree, setShowTechTree] = useState(false);
 
   useEffect(() => {
     const unsubscribe = gameUIController.subscribe(setUiState);
@@ -994,6 +1129,84 @@ export const GameUI: React.FC = () => {
               <span className="stat-value state-badge">运输中</span>
             </div>
           )}
+
+          {unit.data.maxAmmo !== undefined && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">弹药</span>
+              <div className="ammo-bar">
+                <div
+                  className="ammo-fill"
+                  style={{ width: `${((unit.ammo ?? unit.data.maxAmmo) / unit.data.maxAmmo) * 100}%` }}
+                />
+                <span className="ammo-text">{unit.ammo ?? unit.data.maxAmmo}/{unit.data.maxAmmo}</span>
+              </div>
+            </div>
+          )}
+
+          {unit.isSubmerged && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">状态</span>
+              <span className="stat-value status-badge submerged-badge">下潜中</span>
+            </div>
+          )}
+
+          {unit._grappledBySquid && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">状态</span>
+              <span className="stat-value status-badge grappled-badge">被缠绕</span>
+            </div>
+          )}
+
+          {unit.isInvulnerable && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">状态</span>
+              <span className="stat-value status-badge invulnerable-badge">无敌</span>
+            </div>
+          )}
+
+          {unit.isChronoShifting && unit.type !== UnitType.CHRONO && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">传送</span>
+              <div className="chrono-status">
+                <span className="chrono-text">传送中...</span>
+                <div className="chrono-progress-bar">
+                  <div
+                    className="chrono-progress-fill"
+                    style={{ width: `${Math.max(0, (1 - (unit.chronoShiftTimer || 0) / 2)) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {unit.isChronoCooldown && unit.type !== UnitType.CHRONO && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">传送</span>
+              <div className="chrono-status">
+                <span className="chrono-text cooldown">冷却中 ({Math.ceil(unit.chronoShiftTimer || 0)}s)</span>
+                <div className="chrono-progress-bar cooldown">
+                  <div
+                    className="chrono-progress-fill cooldown"
+                    style={{ width: `${Math.max(0, (1 - (unit.chronoShiftTimer || 0) / 5)) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {unit.isDisguised && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">状态</span>
+              <span className="stat-value status-badge disguised-badge">伪装中</span>
+            </div>
+          )}
+
+          {unit.isReturningToBase && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">状态</span>
+              <span className="stat-value status-badge returning-badge">返航装弹</span>
+            </div>
+          )}
         </div>
 
         <div className="action-buttons">
@@ -1171,6 +1384,27 @@ export const GameUI: React.FC = () => {
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {currentPlayer?.spyInfiltrationBuffs?.veteranInfantry && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">间谍增益</span>
+              <span className="stat-value status-badge veteran-badge">老兵步兵</span>
+            </div>
+          )}
+
+          {currentPlayer?.spyInfiltrationBuffs?.veteranVehicles && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">间谍增益</span>
+              <span className="stat-value status-badge veteran-badge">老兵载具</span>
+            </div>
+          )}
+
+          {selectedBuilding.type === BuildingType.REFINERY && currentPlayer?.buildings.some(b => b.type === BuildingType.ORE_PURIFIER && b.isConstructed && b.isPowered) && (
+            <div className="stat-row" role="listitem">
+              <span className="stat-label">矿石加成</span>
+              <span className="stat-value status-badge purifier-badge">采矿+25%</span>
             </div>
           )}
         </div>
@@ -1529,6 +1763,11 @@ export const GameUI: React.FC = () => {
           ☰
         </button>
       )}
+      {!isObserverMode && (
+        <button className="tech-tree-button" onClick={() => setShowTechTree(true)} title="科技树">
+          🌳 科技树
+        </button>
+      )}
       {!isObserverMode && renderAlertNotification()}
       {!isObserverMode && renderUnitInfo()}
       {!isObserverMode && renderBuildingInfo()}
@@ -1590,6 +1829,8 @@ export const GameUI: React.FC = () => {
           </div>
         </div>
       )}
+      {showTechTree && <TechTreePanel onClose={() => setShowTechTree(false)} />}
+      <GameNotificationSystem />
     </>
   );
 };

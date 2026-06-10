@@ -48,6 +48,7 @@ export class SpyInfiltrationSystem {
         }
         spyOwner.spyInfiltrationBuffs.veteranInfantry = true;
         gameEventBus.emit('ui:notification', { message: '间谍渗透兵营！我方步兵将以老兵等级生产！', type: 'success' });
+        gameEventBus.emit('notification:success', { message: '间谍渗透: 步兵老兵化' });
         return { success: true, effect: 'veteran_infantry' };
       }
 
@@ -58,6 +59,7 @@ export class SpyInfiltrationSystem {
         }
         spyOwner.spyInfiltrationBuffs.veteranVehicles = true;
         gameEventBus.emit('ui:notification', { message: '间谍渗透战车工厂！我方车辆将以老兵等级生产！', type: 'success' });
+        gameEventBus.emit('notification:success', { message: '间谍渗透: 载具老兵化' });
         return { success: true, effect: 'veteran_vehicles' };
       }
 

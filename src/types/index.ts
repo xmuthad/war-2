@@ -472,6 +472,8 @@ export interface Unit {
   _debuffUntil?: number;         // gameTime when attack debuff expires
   _psychicDetectedUntil?: number; // gameTime when psychic sensor detection expires
   _spyRevealedUntil?: number;    // gameTime when spy map reveal expires
+  _grappledBySquid?: string;     // ID of the squid grappling this unit
+  _grappleUntil?: number;        // gameTime when grapple effect expires
   // Garrison system
   garrisonedBuildingId?: string; // ID of building this unit is garrisoned in
   // MCV deploy system
@@ -479,6 +481,7 @@ export interface Unit {
   deployBuildingType?: BuildingType; // What building type to deploy into
   isDeploying?: boolean;         // Currently deploying
   deployTimer?: number;          // Time remaining for deployment
+  chronoFreezeProgress?: number; // 0 to 1, when reaches 1 the unit is destroyed by Chrono Legionnaire
 }
 
 export enum UnitRank {
@@ -537,6 +540,8 @@ export interface Building {
   elevationLevel?: number;
   // Description
   description?: string;
+  // Chrono Legionnaire freeze
+  chronoFreezeProgress?: number; // 0 to 1, when reaches 1 the building is destroyed by Chrono Legionnaire
 }
 
 export interface BuildQueueItem {

@@ -18,11 +18,14 @@ import type {
   Tile,
   Vector2,
   BuildQueueItem,
+  PendingBomb,
 } from '../../types';
 import { AIController } from './AIController';
 import { useGameStore, type GameSettings } from '../../store/gameStore';
 import { getUnitsByFaction } from '../data/units';
 import { getBuildingsByFaction } from '../data/buildings';
+import { ivanBombSystem } from './IvanBombSystem';
+import { radiationSystem, type RadiationZone } from './RadiationSystem';
 
 export interface SaveSlot {
   id: number;
@@ -46,6 +49,15 @@ export interface SaveData {
   gameState: GameState;
   neutralBuildings: Building[];
   gameSettings?: GameSettings;
+  pendingBombs?: PendingBomb[];
+  radiationZones?: Array<{
+    id: string;
+    position: { x: number; y: number };
+    radius: number;
+    damagePerSecond: number;
+    remainingTime: number;
+    faction: string;
+  }>;
 }
 
 interface SaveStorage {
@@ -210,7 +222,19 @@ function validateUnit(unit: unknown): unit is Unit {
     // Garrison/deploy fields
     (u.garrisonedBuildingId === undefined || u.garrisonedBuildingId === null || typeof u.garrisonedBuildingId === 'string') &&
     (u.isDeploying === undefined || typeof u.isDeploying === 'boolean') &&
-    (u.deployTimer === undefined || typeof u.deployTimer === 'number')
+    (u.deployTimer === undefined || typeof u.deployTimer === 'number') &&
+    // Grapple/psychic/spy fields
+    (u._grappledBySquid === undefined || typeof u._grappledBySquid === 'string') &&
+    (u._grappleUntil === undefined || typeof u._grappleUntil === 'number') &&
+    (u._psychicDetectedUntil === undefined || typeof u._psychicDetectedUntil === 'number') &&
+    (u._spyRevealedUntil === undefined || typeof u._spyRevealedUntil === 'number') &&
+    // Invulnerability fields
+    (u.isInvulnerable === undefined || typeof u.isInvulnerable === 'boolean') &&
+    (u.invulnerableUntil === undefined || typeof u.invulnerableUntil === 'number') &&
+    // Ammo/return/submerged fields
+    (u.ammo === undefined || typeof u.ammo === 'number') &&
+    (u.isReturningToBase === undefined || typeof u.isReturningToBase === 'boolean') &&
+    (u.isSubmerged === undefined || typeof u.isSubmerged === 'boolean')
   );
 }
 
@@ -501,6 +525,11 @@ export class SaveManager {
         unit.isInvulnerable = unit.isInvulnerable ?? false;
         unit.invulnerableUntil = unit.invulnerableUntil ?? undefined;
         unit.isRepairingAtFactory = unit.isRepairingAtFactory ?? false;
+        // Grapple/psychic/spy fields
+        unit._grappledBySquid = unit._grappledBySquid ?? undefined;
+        unit._grappleUntil = unit._grappleUntil ?? undefined;
+        unit._psychicDetectedUntil = unit._psychicDetectedUntil ?? undefined;
+        unit._spyRevealedUntil = unit._spyRevealedUntil ?? undefined;
         // Garrison/deploy fields
         unit.garrisonedBuildingId = unit.garrisonedBuildingId ?? undefined;
         unit.isDeploying = unit.isDeploying ?? false;
@@ -542,6 +571,7 @@ export class SaveManager {
       player.researchQueue = player.researchQueue ?? [];
       player.statistics = player.statistics ?? { unitsProduced: 0, unitsLost: 0, enemiesDestroyed: 0, buildingsBuilt: 0, buildingsLost: 0, resourcesGathered: 0 };
       player._tempSpySatelliteUntil = player._tempSpySatelliteUntil ?? undefined;
+      player.spyInfiltrationBuffs = player.spyInfiltrationBuffs ?? undefined;
     }
     // Rehydrate neutral building data
     if (data.neutralBuildings) {
@@ -552,6 +582,16 @@ export class SaveManager {
           building.data = freshBuildingData;
         }
       }
+    }
+
+    // Restore IvanBombSystem bombs
+    if (data.pendingBombs) {
+      ivanBombSystem.restoreBombs(data.pendingBombs);
+    }
+
+    // Restore RadiationSystem zones
+    if (data.radiationZones) {
+      radiationSystem.restoreZones(data.radiationZones as RadiationZone[]);
     }
 
     useGameStore.setState({

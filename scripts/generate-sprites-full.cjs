@@ -1452,6 +1452,419 @@ function generateMCV(faction) {
   return canvas;
 }
 
+function generateDolphin() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.allied;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      const swimAnim = Math.sin(frame * Math.PI/2) * 3;
+
+      drawShadow(ctx, 0, 0, 20);
+
+      // 身体 - 蓝灰色流线型
+      ctx.beginPath();
+      ctx.ellipse(0, swimAnim, 22, 10, 0, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([140, 160, 180]);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0, swimAnim, 18, 7, 0, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([160, 180, 200]);
+      ctx.fill();
+
+      // 背鳍
+      ctx.beginPath();
+      ctx.moveTo(-2, swimAnim - 8);
+      ctx.lineTo(6, swimAnim - 16);
+      ctx.lineTo(10, swimAnim - 8);
+      ctx.fillStyle = rgba([120, 140, 160]);
+      ctx.fill();
+
+      // 尾鳍
+      const tailWag = Math.sin(frame * Math.PI) * 4;
+      ctx.beginPath();
+      ctx.moveTo(-20, swimAnim);
+      ctx.lineTo(-28, swimAnim - 6 + tailWag);
+      ctx.lineTo(-28, swimAnim + 6 + tailWag);
+      ctx.closePath();
+      ctx.fillStyle = rgba([120, 140, 160]);
+      ctx.fill();
+
+      // 吻部
+      drawRect(ctx, 18, swimAnim - 2, 8, 4, [130, 150, 170], 0, 0);
+
+      // 眼睛
+      drawRect(ctx, 10, swimAnim - 4, 3, 3, [30, 30, 50], 0, 0);
+
+      // 阵营标记
+      drawRect(ctx, -4, swimAnim - 2, 8, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateSquid() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.soviet;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      const swimAnim = Math.sin(frame * Math.PI/2) * 2;
+
+      drawShadow(ctx, 0, 0, 22);
+
+      // 头部 - 深红/棕色
+      ctx.beginPath();
+      ctx.ellipse(4, swimAnim, 14, 16, 0, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([120, 40, 30]);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(4, swimAnim, 10, 12, 0, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([140, 50, 35]);
+      ctx.fill();
+
+      // 触手
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI - Math.PI/2 + Math.PI;
+        const tentacleAnim = Math.sin(frame * Math.PI/2 + i) * 3;
+        const tx = -8 + Math.cos(angle) * 4;
+        const ty = swimAnim + 14 + Math.sin(angle) * 4;
+        ctx.strokeStyle = rgba([100, 30, 20]);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(tx, swimAnim + 12);
+        ctx.quadraticCurveTo(tx - 4, ty + 4 + tentacleAnim, tx - 6, ty + 10 + tentacleAnim);
+        ctx.stroke();
+      }
+
+      // 眼睛
+      drawRect(ctx, 8, swimAnim - 6, 4, 4, [255, 200, 50], 0, 0);
+      drawRect(ctx, 9, swimAnim - 5, 2, 2, [30, 10, 10], 0, 0);
+
+      // 阵营标记
+      drawRect(ctx, 0, swimAnim - 2, 6, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateCarrier() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.allied;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      const bobAnim = Math.sin(frame * Math.PI/2) * 2;
+
+      drawShadow(ctx, 0, 0, 30);
+
+      // 船体
+      drawRect(ctx, -28, -8 + bobAnim, 56, 20, colors.primary, 0, 0);
+      drawRect(ctx, -26, -4 + bobAnim, 52, 14, colors.secondary, 0, 0);
+      drawRect(ctx, -28, -10 + bobAnim, 56, 6, colors.highlight, 0, 0);
+
+      // 飞行甲板
+      drawRect(ctx, -24, -14 + bobAnim, 40, 8, [180, 180, 180], 0, 0);
+      drawRect(ctx, -22, -12 + bobAnim, 36, 4, [200, 200, 200], 0, 0);
+
+      // 舰岛
+      drawRect(ctx, 16, -20 + bobAnim, 10, 12, colors.primary, 0, 0);
+      drawRect(ctx, 18, -18 + bobAnim, 6, 4, COLORS.common.glass, 0, 0);
+
+      // 雷达天线
+      drawRect(ctx, 19, -26 + bobAnim, 4, 8, [80, 80, 80], 0, 0);
+      drawRect(ctx, 16, -26 + bobAnim, 10, 2, [100, 100, 100], 0, 0);
+
+      // 飞机
+      drawRect(ctx, -16, -12 + bobAnim, 8, 3, [160, 160, 160], 0, 0);
+      drawRect(ctx, -6, -12 + bobAnim, 8, 3, [160, 160, 160], 0, 0);
+
+      // 阵营标记
+      drawRect(ctx, -4, 2 + bobAnim, 8, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateV3Rocket() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.soviet;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 28);
+      const trackOffset = frame * 2 % 8;
+
+      // 履带
+      drawRect(ctx, -26, -10, 10, 24, COLORS.common.track, 0, 0);
+      for (let i = -10; i < 12; i += 4) {
+        drawRect(ctx, -25, i + trackOffset % 4 - 4, 8, 2, COLORS.common.trackLight, 0, 0);
+      }
+      drawRect(ctx, 16, -10, 10, 24, COLORS.common.track, 0, 0);
+      for (let i = -10; i < 12; i += 4) {
+        drawRect(ctx, 17, i + trackOffset % 4 - 4, 8, 2, COLORS.common.trackLight, 0, 0);
+      }
+
+      // 车身
+      drawRect(ctx, -18, -14, 36, 28, colors.primary, 0, 0);
+      drawRect(ctx, -16, -10, 32, 20, colors.secondary, 0, 0);
+      drawRect(ctx, -16, -12, 32, 6, colors.highlight, 0, 0);
+
+      // 大型火箭发射架
+      drawRect(ctx, -10, -18, 20, 6, [80, 80, 80], 0, 0);
+      drawRect(ctx, -8, -20, 16, 4, [100, 100, 100], 0, 0);
+
+      // 火箭弹
+      drawRect(ctx, -6, -28, 12, 10, [180, 60, 40], 0, 0);
+      drawRect(ctx, -4, -30, 8, 4, [200, 80, 50], 0, 0);
+      drawRect(ctx, -3, -32, 6, 4, [220, 100, 60], 0, 0);
+
+      // 火箭尾焰（动画）
+      if (frame > 0) {
+        const flameLen = 4 + frame * 2;
+        drawRect(ctx, -4, -28 - flameLen, 8, flameLen, [255, 150, 50], 0, 0);
+        drawRect(ctx, -2, -28 - flameLen - 2, 4, 4, [255, 220, 100], 0, 0);
+      }
+
+      // 阵营标记
+      drawRect(ctx, -4, -2, 8, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateChronoMiner(faction) {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = faction === 'allied' ? COLORS.allied : COLORS.soviet;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      drawShadow(ctx, 0, 0, 30);
+      const trackOffset = frame * 2 % 8;
+
+      // 履带
+      drawRect(ctx, -30, -10, 12, 28, COLORS.common.track, 0, 0);
+      for (let i = -10; i < 16; i += 4) {
+        drawRect(ctx, -29, i + trackOffset % 4 - 4, 10, 2, COLORS.common.trackLight, 0, 0);
+      }
+      drawRect(ctx, 18, -10, 12, 28, COLORS.common.track, 0, 0);
+      for (let i = -10; i < 16; i += 4) {
+        drawRect(ctx, 19, i + trackOffset % 4 - 4, 10, 2, COLORS.common.trackLight, 0, 0);
+      }
+
+      // 车身
+      drawRect(ctx, -22, -16, 44, 34, colors.primary, 0, 0);
+      drawRect(ctx, -20, -10, 40, 24, colors.secondary, 0, 0);
+      drawRect(ctx, -20, -14, 40, 8, colors.highlight, 0, 0);
+
+      // 矿斗
+      drawRect(ctx, -16, -12, 32, 16, [255, 179, 71], 0, 0);
+      for (let i = 0; i < 3; i++) {
+        const anim = Math.sin(frame + i) * 3;
+        drawRect(ctx, -12 + i * 10 + anim, -8, 6, 8, [255, 225, 100], 0, 0);
+      }
+
+      // 时空传送装置（顶部蓝色圆盘）
+      drawRect(ctx, -8, -22, 16, 8, [60, 80, 140], 0, 0);
+      ctx.beginPath();
+      ctx.arc(0, -22, 8, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([80, 120, 200]);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, -22, 5, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([100, 200, 255]);
+      ctx.fill();
+
+      // 时空闪烁动画
+      const chronoPulse = Math.sin(frame * Math.PI/2) * 0.5 + 0.5;
+      ctx.beginPath();
+      ctx.arc(0, -22, 3, 0, Math.PI * 2);
+      ctx.fillStyle = rgba([180, 220, 255], Math.floor(chronoPulse * 255));
+      ctx.fill();
+
+      // 驾驶舱
+      drawRect(ctx, -10, -18, 8, 4, COLORS.common.glass, 0, 0);
+      drawRect(ctx, 2, -18, 8, 4, COLORS.common.glass, 0, 0);
+
+      // 阵营标记
+      drawRect(ctx, -4, 2, 8, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
+function generateHarrier() {
+  const width = SPRITE_SIZE * FRAMES;
+  const height = SPRITE_SIZE * DIRECTIONS;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const colors = COLORS.allied;
+  const dirAngles = [ -Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, -Math.PI*3/4 ];
+
+  for (let dir = 0; dir < DIRECTIONS; dir++) {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const ox = frame * SPRITE_SIZE;
+      const oy = dir * SPRITE_SIZE;
+      const cx = ox + SPRITE_SIZE/2;
+      const cy = oy + SPRITE_SIZE/2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(dirAngles[dir]);
+
+      const floatOffset = Math.sin(frame * Math.PI/2) * 3;
+
+      drawShadow(ctx, 0, 0, 22);
+
+      // 机身 - 固定翼战斗机
+      ctx.beginPath();
+      ctx.ellipse(0, floatOffset, 24, 8, 0, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(colors.primary);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0, floatOffset, 20, 5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(colors.highlight);
+      ctx.fill();
+
+      // 三角翼
+      ctx.beginPath();
+      ctx.moveTo(-6, floatOffset);
+      ctx.lineTo(-16, floatOffset - 16);
+      ctx.lineTo(-2, floatOffset - 4);
+      ctx.closePath();
+      ctx.fillStyle = rgba(colors.secondary);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-6, floatOffset);
+      ctx.lineTo(-16, floatOffset + 16);
+      ctx.lineTo(-2, floatOffset + 4);
+      ctx.closePath();
+      ctx.fillStyle = rgba(colors.secondary);
+      ctx.fill();
+
+      // 尾翼
+      ctx.beginPath();
+      ctx.moveTo(-20, floatOffset);
+      ctx.lineTo(-26, floatOffset - 8);
+      ctx.lineTo(-22, floatOffset);
+      ctx.closePath();
+      ctx.fillStyle = rgba(colors.primary);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-20, floatOffset);
+      ctx.lineTo(-26, floatOffset + 8);
+      ctx.lineTo(-22, floatOffset);
+      ctx.closePath();
+      ctx.fillStyle = rgba(colors.primary);
+      ctx.fill();
+
+      // 座舱
+      drawRect(ctx, 6, floatOffset - 3, 8, 6, COLORS.common.glass, 0, 0);
+
+      // 机头
+      drawRect(ctx, 20, floatOffset - 2, 6, 4, darken(colors.primary, 20), 0, 0);
+
+      // 引擎尾焰
+      const flameLen = 3 + frame * 2;
+      drawRect(ctx, -24 - flameLen, floatOffset - 2, flameLen, 4, [255, 150, 50], 0, 0);
+      drawRect(ctx, -24 - flameLen - 2, floatOffset - 1, 4, 2, [255, 220, 100], 0, 0);
+
+      // 阵营标记
+      drawRect(ctx, -2, floatOffset - 2, 6, 4, colors.accent, 0, 0);
+
+      ctx.restore();
+    }
+  }
+  return canvas;
+}
+
 // ============ 建筑精灵图生成 ============
 
 function generateBuilding(type, faction) {
@@ -2098,6 +2511,208 @@ function generateBuilding(type, faction) {
     ctx.lineTo(124, 90);
     ctx.stroke();
   }
+  else if (type === 'gap_generator') {
+    // 间隙发生器 - 盟军天线塔，蓝色电弧
+    drawRect(ctx, 54, 20, 20, 80, colors.secondary);
+    drawRect(ctx, 56, 22, 16, 76, colors.highlight);
+    // 天线
+    drawRect(ctx, 62, 4, 4, 20, [80, 80, 80]);
+    drawRect(ctx, 56, 4, 16, 3, [100, 100, 100]);
+    // 顶部发射器
+    ctx.beginPath();
+    ctx.arc(64, 6, 8, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([60, 100, 180]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 6, 5, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([100, 180, 255]);
+    ctx.fill();
+    // 蓝色电弧
+    ctx.strokeStyle = rgba([100, 200, 255], 180);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(64 + Math.cos(angle) * 8, 6 + Math.sin(angle) * 8);
+      ctx.lineTo(64 + Math.cos(angle) * 18, 6 + Math.sin(angle) * 18);
+      ctx.stroke();
+    }
+    // 底座
+    drawRect(ctx, 44, 90, 40, 16, colors.primary);
+    drawRect(ctx, 46, 92, 36, 12, colors.secondary);
+    // 阵营标记
+    drawRect(ctx, 56, 94, 16, 4, colors.accent);
+  }
+  else if (type === 'nuclear_reactor') {
+    // 核反应堆 - 苏联大型穹顶，辐射标志，绿色辉光
+    drawRect(ctx, 20, 50, 88, 50, colors.primary);
+    drawRect(ctx, 22, 52, 84, 46, colors.secondary);
+    // 穹顶
+    ctx.beginPath();
+    ctx.arc(64, 50, 40, Math.PI, 0);
+    ctx.fillStyle = rgba(colors.primary);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 50, 36, Math.PI, 0);
+    ctx.fillStyle = rgba(colors.highlight);
+    ctx.fill();
+    // 辐射标志
+    ctx.fillStyle = rgba([255, 255, 0]);
+    ctx.beginPath();
+    ctx.arc(64, 50, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rgba(colors.primary);
+    ctx.beginPath();
+    ctx.arc(64, 50, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // 辐射扇叶
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 - Math.PI/2;
+      ctx.beginPath();
+      ctx.moveTo(64, 50);
+      ctx.arc(64, 50, 12, a - 0.3, a + 0.3);
+      ctx.closePath();
+      ctx.fillStyle = rgba([255, 255, 0]);
+      ctx.fill();
+    }
+    // 绿色辉光
+    const glow = ctx.createRadialGradient(64, 50, 10, 64, 50, 50);
+    glow.addColorStop(0, 'rgba(0, 255, 0, 0.15)');
+    glow.addColorStop(1, 'rgba(0, 255, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(64, 50, 50, 0, Math.PI * 2);
+    ctx.fill();
+    // 冷却塔
+    drawRect(ctx, 28, 30, 12, 24, [80, 80, 80]);
+    drawRect(ctx, 30, 32, 8, 20, [100, 100, 100]);
+    drawRect(ctx, 88, 30, 12, 24, [80, 80, 80]);
+    drawRect(ctx, 90, 32, 8, 20, [100, 100, 100]);
+    // 阵营标记
+    drawRect(ctx, 52, 80, 24, 4, colors.accent);
+  }
+  else if (type === 'flak_cannon') {
+    // 防空炮 - 苏联4管高射炮
+    drawRect(ctx, 30, 70, 68, 30, colors.primary);
+    drawRect(ctx, 32, 72, 64, 26, colors.secondary);
+    // 旋转底座
+    ctx.beginPath();
+    ctx.arc(64, 70, 20, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([80, 80, 80]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 70, 14, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([100, 100, 100]);
+    ctx.fill();
+    // 4根炮管朝上
+    drawRect(ctx, 48, 20, 4, 50, COLORS.common.gun);
+    drawRect(ctx, 56, 16, 4, 54, COLORS.common.gun);
+    drawRect(ctx, 68, 16, 4, 54, COLORS.common.gun);
+    drawRect(ctx, 76, 20, 4, 50, COLORS.common.gun);
+    // 炮口
+    drawRect(ctx, 46, 18, 8, 4, [40, 40, 40]);
+    drawRect(ctx, 54, 14, 8, 4, [40, 40, 40]);
+    drawRect(ctx, 66, 14, 8, 4, [40, 40, 40]);
+    drawRect(ctx, 74, 18, 8, 4, [40, 40, 40]);
+    // 弹药箱
+    drawRect(ctx, 36, 76, 12, 10, [60, 60, 60]);
+    drawRect(ctx, 80, 76, 12, 10, [60, 60, 60]);
+    // 阵营标记
+    drawRect(ctx, 52, 80, 24, 4, colors.accent);
+  }
+  else if (type === 'spy_satellite') {
+    // 间谍卫星 - 盟军卫星碟形天线朝上
+    drawRect(ctx, 44, 80, 40, 20, colors.primary);
+    drawRect(ctx, 46, 82, 36, 16, colors.secondary);
+    // 支撑柱
+    drawRect(ctx, 60, 40, 8, 44, [80, 80, 80]);
+    drawRect(ctx, 62, 42, 4, 40, [100, 100, 100]);
+    // 碟形天线
+    ctx.beginPath();
+    ctx.ellipse(64, 36, 30, 10, 0, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([180, 180, 180]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(64, 34, 26, 8, 0, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([200, 200, 200]);
+    ctx.fill();
+    // 天线中心
+    ctx.beginPath();
+    ctx.arc(64, 34, 6, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(colors.highlight);
+    ctx.fill();
+    // 信号接收器
+    drawRect(ctx, 62, 20, 4, 16, [60, 60, 60]);
+    ctx.beginPath();
+    ctx.arc(64, 18, 4, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([100, 200, 255]);
+    ctx.fill();
+    // 阵营标记
+    drawRect(ctx, 52, 86, 24, 4, colors.accent);
+  }
+  else if (type === 'ore_purifier') {
+    // 矿石精炼器 - 盟军精炼厂加蓝色过滤管
+    drawRect(ctx, 10, 40, 108, 60, colors.primary);
+    drawRect(ctx, 12, 42, 104, 56, colors.secondary);
+    drawRect(ctx, 10, 40, 108, 10, colors.highlight);
+    // 精炼罐
+    ctx.beginPath();
+    ctx.arc(40, 50, 16, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([200, 180, 100]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(40, 50, 12, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([220, 200, 120]);
+    ctx.fill();
+    // 蓝色过滤管
+    drawRect(ctx, 56, 44, 6, 30, [60, 100, 180]);
+    drawRect(ctx, 66, 44, 6, 30, [60, 100, 180]);
+    drawRect(ctx, 76, 44, 6, 30, [60, 100, 180]);
+    // 管道连接
+    drawRect(ctx, 54, 50, 30, 4, [80, 120, 200]);
+    drawRect(ctx, 54, 62, 30, 4, [80, 120, 200]);
+    // 蓝色过滤器
+    ctx.beginPath();
+    ctx.arc(88, 55, 10, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([60, 120, 200]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(88, 55, 6, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([100, 180, 255]);
+    ctx.fill();
+    // 窗户
+    for (let x = 18; x < 50; x += 16) {
+      drawRect(ctx, x, 72, 8, 8, COLORS.common.glass);
+    }
+    // 阵营标记
+    drawRect(ctx, 52, 86, 24, 4, colors.accent);
+  }
+  else if (type === 'grand_cannon') {
+    // 巨炮 - 法国超大型炮管
+    drawRect(ctx, 20, 70, 88, 30, COLORS.france.primary);
+    drawRect(ctx, 22, 72, 84, 26, COLORS.france.secondary);
+    drawRect(ctx, 20, 70, 88, 8, COLORS.france.highlight);
+    // 旋转底座
+    ctx.beginPath();
+    ctx.arc(64, 70, 24, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([80, 80, 80]);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 70, 18, 0, Math.PI * 2);
+    ctx.fillStyle = rgba([100, 100, 100]);
+    ctx.fill();
+    // 超大型炮管
+    drawRect(ctx, 58, 10, 12, 62, COLORS.common.gun);
+    drawRect(ctx, 60, 8, 8, 64, [40, 40, 40]);
+    // 炮口制退器
+    drawRect(ctx, 54, 6, 20, 6, [50, 50, 50]);
+    drawRect(ctx, 56, 4, 16, 4, [60, 60, 60]);
+    // 装甲护盾
+    drawRect(ctx, 50, 56, 28, 16, COLORS.france.primary);
+    drawRect(ctx, 52, 58, 24, 12, COLORS.france.highlight);
+    // 阵营标记
+    drawRect(ctx, 52, 82, 24, 4, COLORS.france.accent);
+  }
 
   return canvas;
 }
@@ -2190,6 +2805,14 @@ async function main() {
   saveCanvas(generateMCV('allied'), path.join(outDir, 'units/allied_mcv.png'));
   saveCanvas(generateMCV('soviet'), path.join(outDir, 'units/soviet_mcv.png'));
 
+  // 新增RA2单位
+  saveCanvas(generateDolphin(), path.join(outDir, 'units/allied_dolphin.png'));
+  saveCanvas(generateSquid(), path.join(outDir, 'units/soviet_squid.png'));
+  saveCanvas(generateCarrier(), path.join(outDir, 'units/allied_carrier.png'));
+  saveCanvas(generateV3Rocket(), path.join(outDir, 'units/soviet_v3_rocket.png'));
+  saveCanvas(generateChronoMiner('allied'), path.join(outDir, 'units/allied_chrono_miner.png'));
+  saveCanvas(generateHarrier(), path.join(outDir, 'units/allied_harrier.png'));
+
   console.log('🏛️  生成建筑精灵图...');
   
   // 基础建筑
@@ -2244,6 +2867,14 @@ async function main() {
   saveCanvas(generateBuilding('machine_shop', 'allied'), path.join(outDir, 'buildings/neutral_machine_shop.png'));
   saveCanvas(generateBuilding('bridge', 'allied'), path.join(outDir, 'buildings/neutral_bridge.png'));
   saveCanvas(generateBuilding('bridge_destroyed', 'allied'), path.join(outDir, 'buildings/neutral_bridge_destroyed.png'));
+
+  // 新增RA2建筑
+  saveCanvas(generateBuilding('gap_generator', 'allied'), path.join(outDir, 'buildings/allied_gap_generator.png'));
+  saveCanvas(generateBuilding('nuclear_reactor', 'soviet'), path.join(outDir, 'buildings/soviet_nuclear_reactor.png'));
+  saveCanvas(generateBuilding('flak_cannon', 'soviet'), path.join(outDir, 'buildings/soviet_flak_cannon.png'));
+  saveCanvas(generateBuilding('spy_satellite', 'allied'), path.join(outDir, 'buildings/allied_spy_satellite.png'));
+  saveCanvas(generateBuilding('ore_purifier', 'allied'), path.join(outDir, 'buildings/allied_ore_purifier.png'));
+  saveCanvas(generateBuilding('grand_cannon', 'allied'), path.join(outDir, 'buildings/allied_grand_cannon.png'));
 
   console.log('\n✅ 完整精灵图集生成完成！');
   console.log('📍 文件位置: public/assets/sprites/');

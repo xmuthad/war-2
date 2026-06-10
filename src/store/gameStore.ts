@@ -30,7 +30,7 @@ import { AIController } from '../game/systems/AIController';
 import { buildAIContext } from '../game/systems/AIContextAdapter';
 import { createGameCommands } from '../game/systems/AIGameCommands';
 
-import { gameEventBus } from '../game/systems/GameEventBus';
+import { gameEventBus, GameEventType } from '../game/systems/GameEventBus';
 import { saveManager } from '../game/systems/SaveManager';
 import { mapManager } from '../game/map/MapManager';
 import { PowerSystem } from '../game/systems/PowerSystem';
@@ -48,6 +48,7 @@ import { garrisonSystem } from '../game/systems/GarrisonSystem';
 import { bridgeSystem } from '../game/systems/BridgeSystem';
 import { deploySystem } from '../game/systems/DeploySystem';
 import { ChronoShiftSystem } from '../game/systems/ChronoShiftSystem';
+import { SubmarineSystem } from '../game/systems/SubmarineSystem';
 import { terrainHeightSystem } from '../game/systems/TerrainHeightSystem';
 import { AI_CONFIG } from '../game/config/AIConfig';
 import { CombatUpdateSystem } from '../game/systems/CombatUpdateSystem';
@@ -103,6 +104,7 @@ const autoHarvestSys = new AutoHarvestSystem();
 const attackWaveSys = new AttackWaveSystem();
 const spyInfiltrationSystem = new SpyInfiltrationSystem();
 const chronoShiftSystem = new ChronoShiftSystem();
+const submarineSystem = new SubmarineSystem();
 
 type LogLevel = 'info' | 'warn' | 'error';
 
@@ -280,6 +282,10 @@ interface GameStore {
   cameraBookmarks: Array<{ x: number; y: number } | null>;
   saveCameraBookmark: (index: number, position: { x: number; y: number }) => void;
   loadCameraBookmark: (index: number) => { x: number; y: number } | null;
+  // Notification system
+  notifications: Array<{ id: string; type: string; message: string; timestamp: number }>;
+  addNotification: (type: string, message: string) => void;
+  removeNotification: (id: string) => void;
 }
 
 function createUnitFromData(type: UnitType, faction: Faction, position: Vector2, researchedUpgrades: UpgradeType[] = []): Unit {
@@ -394,7 +400,7 @@ function createUnitInternal(type: UnitType, faction: Faction, position: Vector2,
     data,
     harvestTarget: null,
     cargo: 0,
-    cargoCapacity: type === UnitType.MINER ? GAME_CONFIG.CARGO_CAPACITY : 0,
+    cargoCapacity: data.canHarvest ? (data.cargoCapacity || GAME_CONFIG.CARGO_CAPACITY) : 0,
     kills: 0,
     rank: UnitRank.ROOKIE,
     direction: 0,
@@ -778,6 +784,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
   tutorialHighlight: null,
   // Camera bookmarks
   cameraBookmarks: [null, null, null, null],
+  // Notification system
+  notifications: [],
 
   setGameState: (state) => set({ gameState: state }),
 
@@ -1549,6 +1557,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           const tilePos = mapManager.worldToTile(building.position.x, building.position.y);
           mapManager.unmarkOccupied(tilePos.x, tilePos.y, building.width, building.height);
           gameEventBus.emit('building:destroyed', { buildingId, type: building.type, faction: building.faction, position: building.position });
+          // Notification: building destroyed (only for current player)
+          if (player === state.currentPlayer) {
+            get().addNotification('danger', `建筑被摧毁: ${building.data.name}`);
+          }
           player.statistics.buildingsLost++;
           player.buildings = player.buildings.filter(b => b.id !== buildingId);
           break;
@@ -1616,6 +1628,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       );
 
       gameEventBus.emit('nuclear:explosion', { position: pos, faction: nuclearExplosion.faction });
+      // Notification: nuclear reactor explosion
+      if (nuclearExplosion.faction === get().currentPlayer?.faction) {
+        get().addNotification('danger', '核子反应炉爆炸！');
+      }
 
       for (const id of destroyedUnitIds) {
         get().destroyUnit(id);
@@ -1756,6 +1772,9 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         // Chrono Legionnaire: process teleport charging and cooldown
         chronoShiftSystem.update(deltaTime, player.units, state.gameTime);
 
+        // Submarine stealth: auto-dive/surface based on combat state
+        submarineSystem.update(deltaTime, player.units, state);
+
         for (const unit of player.units) {
           // Skip normal movement for chrono-shifting units (cooldown is ok - they can attack/move normally)
           if (!(unit.type === UnitType.CHRONO && unit.isChronoShifting)) {
@@ -1845,14 +1864,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             }
           }
 
-          // Submarine stealth logic: submerged when idle/moving, surfaced when attacking
-          if (unit.type === UnitType.SUBMARINE) {
-            if (unit.state === UnitState.ATTACKING) {
-              unit.isSubmerged = false;
-            } else {
-              unit.isSubmerged = true;
-            }
-          }
+          // Submarine stealth logic: handled by SubmarineSystem
 
           // Spy auto-disguise: disguised when not attacking, revealed when attacking
           if (unit.type === UnitType.SPY) {
@@ -1993,6 +2005,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
               building.superweaponChargeProgress = building.superweaponChargeTime;
               if (!wasReady) {
                 gameEventBus.emit('superweapon:launch', { buildingId: building.id, type: building.type, faction: building.faction, position: building.position });
+                // Notification: superweapon ready
+                if (player === get().currentPlayer) {
+                  get().addNotification('special', `超级武器就绪: ${building.data.name}`);
+                }
               }
             } else {
               // Emit charging event at 25%, 50%, 75% milestones
@@ -2001,6 +2017,34 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
               if (curPct > prevPct && curPct >= 1) {
                 gameEventBus.emit('superweapon:charging', { buildingId: building.id, type: building.type, faction: building.faction, progress: curPct / 4, position: building.position });
               }
+            }
+          }
+        }
+      }
+
+      // Chrono freeze decay: unfreeze units/buildings not currently being attacked by CHRONO
+      const chronoTargets = new Set<string>();
+      for (const player of allPlayers) {
+        for (const unit of player.units) {
+          if (unit.type === UnitType.CHRONO && unit.state === UnitState.ATTACKING && unit.target) {
+            chronoTargets.add(unit.target);
+          }
+        }
+      }
+      for (const player of allPlayers) {
+        for (const unit of player.units) {
+          if (unit.chronoFreezeProgress && unit.chronoFreezeProgress > 0 && !chronoTargets.has(unit.id)) {
+            unit.chronoFreezeProgress -= deltaTime / 3;
+            if (unit.chronoFreezeProgress <= 0) {
+              unit.chronoFreezeProgress = undefined;
+            }
+          }
+        }
+        for (const building of player.buildings) {
+          if (building.chronoFreezeProgress && building.chronoFreezeProgress > 0 && !chronoTargets.has(building.id)) {
+            building.chronoFreezeProgress -= deltaTime / 3;
+            if (building.chronoFreezeProgress <= 0) {
+              building.chronoFreezeProgress = undefined;
             }
           }
         }
@@ -2130,9 +2174,15 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
             ? state.currentPlayer.power / state.currentPlayer.maxPower
             : 1;
           if (powerRatio < 0.25) {
+            if (state.alertLevel !== 'critical') {
+              get().addNotification('warning', '电力不足！');
+            }
             state.alertLevel = 'critical';
             state.alertClearTimer = 5;
           } else if (powerRatio < 0.5) {
+            if (!state.alertLevel) {
+              get().addNotification('warning', '电力不足！');
+            }
             state.alertLevel = 'medium';
             state.alertClearTimer = 5;
           }
@@ -2305,6 +2355,8 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
           gameState: state.gameState,
           neutralBuildings: state.neutralBuildings,
           gameSettings: state.gameSettings,
+          pendingBombs: ivanBombSystem.getBombs(),
+          radiationZones: radiationSystem.getZones(),
         };
         saveManager.saveGame(0, '自动存档', saveData);
       }
@@ -3382,6 +3434,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         player.statistics.enemiesDestroyed += killCount;
         gameEventBus.emit('combat:explosion', { position: targetPosition });
         gameEventBus.emit('superweapon:activated', { type: BuildingType.NUCLEAR_SILO, position: targetPosition, faction: player.faction });
+        // Notification: superweapon fired
+        if (player === get().currentPlayer) {
+          get().addNotification('special', '超级武器发射: 核弹攻击');
+        }
         break;
       }
     });
@@ -3434,6 +3490,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         }
 
         gameEventBus.emit('superweapon:activated', { type: BuildingType.IRON_CURTAIN, position: targetPosition, faction: player.faction });
+        // Notification: iron curtain activated
+        if (player === get().currentPlayer) {
+          get().addNotification('special', '超级武器发射: 铁幕护盾');
+        }
         break;
       }
     });
@@ -3489,6 +3549,10 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
         }
 
         gameEventBus.emit('superweapon:activated', { type: BuildingType.CHRONOSPHERE, position: targetPosition, faction: player.faction });
+        // Notification: chronosphere activated
+        if (player === get().currentPlayer) {
+          get().addNotification('special', '超级武器发射: 超时空传送');
+        }
         break;
       }
     });
@@ -3777,6 +3841,23 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
     return null;
   },
 
+  addNotification: (type, message) => {
+    set((draft) => {
+      const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      draft.notifications.push({ id, type, message, timestamp: Date.now() });
+      // Keep max 8 notifications
+      if (draft.notifications.length > 8) {
+        draft.notifications = draft.notifications.slice(-8);
+      }
+    });
+  },
+
+  removeNotification: (id) => {
+    set((draft) => {
+      draft.notifications = draft.notifications.filter(n => n.id !== id);
+    });
+  },
+
   resetGame: () => {
     // Dispose existing AI controllers before clearing
     const currentControllers = get().aiControllers;
@@ -3809,6 +3890,7 @@ export const useGameStore = create<GameStore>()(immer((set, get) => ({
       gameSettings: { ...DEFAULT_GAME_SETTINGS },
       isCampaignMode: false,
       cameraBookmarks: [null, null, null, null],
+      notifications: [],
       missionResult: null,
       missionStats: null,
       newAchievement: null,
@@ -3963,6 +4045,25 @@ gameEventBus.on('combat:hit', (event) => {
     }
   }
 });
+
+// Subscribe to notification events from GameEventBus
+const NOTIFICATION_EVENT_TYPES: GameEventType[] = [
+  'notification:info',
+  'notification:warning',
+  'notification:danger',
+  'notification:success',
+  'notification:special',
+];
+
+for (const eventType of NOTIFICATION_EVENT_TYPES) {
+  gameEventBus.on(eventType, (event) => {
+    const data = event.data as { message?: string } | undefined;
+    if (data?.message) {
+      const type = eventType.replace('notification:', '');
+      useGameStore.getState().addNotification(type, data.message);
+    }
+  });
+}
 
 // Expose store for E2E testing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

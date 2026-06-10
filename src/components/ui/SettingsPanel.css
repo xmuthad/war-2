@@ -1,13 +1,13 @@
 .settings-button {
   position: fixed;
   top: 6px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
+  right: 56px;
+  width: 28px;
+  height: 28px;
   background: rgba(30, 30, 30, 0.9);
   border: 1px solid rgba(255, 215, 0, 0.3);
   border-radius: 6px;
-  color: #fff;
+  color: var(--color-text-primary, #e0e0e0);
   font-size: 0.8rem;
   cursor: pointer;
   z-index: 50;
@@ -20,7 +20,7 @@
 .settings-button:hover {
   background: rgba(50, 50, 50, 0.95);
   border-color: #FFD700;
-  transform: scale(1.05);
+  transform: scale(1.05) translateY(-1px);
 }
 
 .settings-overlay {
@@ -38,16 +38,37 @@
 }
 
 .settings-panel {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(180deg, #263646 0%, #1c2c3a 30%, #142028 70%, #0e1822 100%);
   border: 1px solid rgba(255, 215, 0, 0.5);
-  border-radius: 10px;
+  border-radius: 6px;
   width: 85%;
   max-width: 380px;
   max-height: 65vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.1);
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.05);
   animation: slideIn 0.3s ease-out;
+}
+
+.settings-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,215,0,0.3), transparent);
+}
+
+.settings-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.6), transparent);
 }
 
 @keyframes fadeIn {
@@ -79,7 +100,7 @@
 .close-btn {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
+  color: var(--color-text-primary, #e0e0e0);
   width: 24px;
   height: 24px;
   border-radius: 5px;
@@ -115,7 +136,7 @@
   border: 1px solid rgba(255, 215, 0, 0.2);
   border-radius: 5px;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -170,14 +191,14 @@
 
 .setting-description {
   display: block;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.5);
   margin-top: 2px;
 }
 
 .setting-slider {
   width: 100%;
-  height: 4px;
+  height: 5px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
   appearance: none;
@@ -186,8 +207,8 @@
 
 .setting-slider::-webkit-slider-thumb {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   background: #FFD700;
   border-radius: 50%;
   cursor: pointer;
@@ -222,7 +243,7 @@
 }
 
 .setting-select option {
-  background: #1a1a2e;
+  background: #1c2c3a;
   color: #fff;
 }
 
@@ -287,7 +308,7 @@
 .hotkey-config-btn:hover {
   background: linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(255, 215, 0, 0.15) 100%);
   border-color: #FFD700;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .settings-footer {
@@ -333,6 +354,7 @@
 
 .cancel-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
 }
 
 .apply-btn {
@@ -349,7 +371,7 @@
 
 .apply-btn:hover {
   background: linear-gradient(135deg, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0.2) 100%);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
 }
 
